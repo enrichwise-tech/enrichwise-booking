@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Book an Appointment — Enrichwise</title>
+<style>
+:root {
+  --brand:       #1D9E75;
+  --brand-dark:  #0F6E56;
+  --brand-light: #E1F5EE;
+  --brand-text:  #085041;
+  --ink:         #1a1a18;
+  --ink-2:       #5a5a55;
+  --ink-3:       #9a9a92;
+  --surface:     #ffffff;
+  --bg:          #f8f7f4;
+  --border:      rgba(0,0,0,0.1);
+  --radius:      10px;
+  --radius-lg:   14px;
+  --danger:      #e24b4a;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem 4rem;
+}
+.shell { width: 100%; max-width: 420px; }
+.brand { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 2.5rem; letter-spacing: -0.2px; }
+.screen { display: none; }
+.screen.active { display: block; animation: fadeUp 0.2s ease; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.back {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--ink-3); cursor: pointer;
+  border: none; background: none; padding: 0; font-family: inherit;
+  margin-bottom: 1.75rem;
+}
+.back:hover { color: var(--ink); }
+h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4px; margin-bottom: 6px; line-height: 1.25; }
+.sub { font-size: 14px; color: var(--ink-2); line-height: 1.6; margin-bottom: 1.75rem; }
+
+/* Phone */
+.phone-row {
+  display: flex; border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; background: var(--surface); transition: border-color 0.15s;
+}
+.phone-row:focus-within { border-color: var(--brand); }
+.prefix {
+  padding: 0 14px; font-size: 15px; color: var(--ink-2);
+  border-right: 1px solid var(--border);
+  display: flex; align-items: center; background: #f2f1ee; white-space: nowrap;
+}
+.phone-row input {
+  flex: 1; border: none; padding: 13px 14px; font-size: 16px;
+  color: var(--ink); background: transparent; outline: none; font-family: inherit;
+}
+
+/* OTP */
+.otp-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.otp-box {
+  flex: 1; min-width: 0; text-align: center; font-size: 22px; font-weight: 600;
+  padding: 14px 0; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); outline: none;
+  transition: border-color 0.15s; font-family: inherit;
+}
+.otp-box:focus { border-color: var(--brand); }
+.otp-box.err { border-color: var(--danger); background: #fff5f5; }
+
+/* Buttons */
+.btn {
+  width: 100%; padding: 14px; border: none; border-radius: var(--radius);
+  background: var(--brand); color: #fff; font-size: 15px; font-weight: 600;
+  cursor: pointer; margin-top: 1rem; font-family: inherit;
+  transition: background 0.15s, transform 0.1s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn:hover { background: var(--brand-dark); }
+.btn:active { transform: scale(0.99); }
+.btn:disabled { background: #d4d4cc; color: #9a9a92; cursor: not-allowed; transform: none; }
+
+/* Error & hint */
+.error-msg {
+  font-size: 12px; color: var(--danger); margin-top: 6px;
+  display: none; align-items: center; gap: 4px;
+}
+.error-msg.show { display: flex; }
+.hint { font-size: 12px; color: var(--ink-3); text-align: center; margin-top: 10px; }
+.resend-wrap { text-align: center; margin-top: 12px; font-size: 13px; color: var(--ink-3); }
+.resend-link { color: var(--brand); cursor: pointer; font-weight: 500; }
+.resend-link:hover { text-decoration: underline; }
+.resend-link.disabled { color: var(--ink-3); pointer-events: none; }
+
+/* Timer */
+.timer { font-variant-numeric: tabular-nums; }
+
+/* Corpus cards */
+.corpus-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 1.25rem; }
+.corpus-card {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); cursor: pointer; transition: border-color 0.15s, background 0.15s; gap: 12px;
+}
+.corpus-card:hover { border-color: var(--brand); }
+.corpus-card.selected { border-color: var(--brand); background: var(--brand-light); }
+.corpus-text { flex: 1; }
+.corpus-amount { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+.corpus-desc { font-size: 12px; color: var(--ink-3); }
+.corpus-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.tag { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 100px; white-space: nowrap; }
+.tag-instant { background: var(--brand-light); color: var(--brand-text); }
+.tag-cb { background: #f2f1ee; color: var(--ink-3); }
+.radio {
+  width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0;
+}
+.corpus-card.selected .radio { border-color: var(--brand); background: var(--brand); }
+.radio-dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+
+/* Slots */
+.day-label { font-size: 12px; font-weight: 600; color: var(--ink-3); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+.slot-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 1.25rem; }
+.slot {
+  padding: 12px 6px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); font-size: 13px; font-weight: 500;
+  cursor: pointer; text-align: center; color: var(--ink);
+  transition: all 0.15s; font-family: inherit;
+}
+.slot:hover { border-color: var(--brand); color: var(--brand); }
+.slot.sel { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+/* Advisor strip */
+.advisor {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; background: #f2f1ee; border-radius: var(--radius); margin-bottom: 1.5rem;
+}
+.av {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--brand-light); border: 1px solid rgba(29,158,117,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; color: var(--brand-text); flex-shrink: 0;
+}
+.av-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+.av-role { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+
+/* Callback box */
+.info-box { background: #f2f1ee; border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 1.25rem; }
+.info-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+.info-body { font-size: 13px; color: var(--ink-2); line-height: 1.65; }
+
+/* Redirect loading */
+.redirect-loading { display: none; text-align: center; padding: 1.5rem 0; }
+.redirect-loading.show { display: block; }
+.spinner {
+  width: 32px; height: 32px; border: 2.5px solid var(--brand-light);
+  border-top-color: var(--brand); border-radius: 50%;
+  animation: spin 0.7s linear infinite; margin: 0 auto 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.redirect-loading p { font-size: 14px; color: var(--ink-2); }
+
+/* Success */
+.success-icon {
+  width: 64px; height: 64px; border-radius: 50%; background: var(--brand-light);
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem;
+}
+.success-text { text-align: center; margin-bottom: 1.75rem; }
+.conf-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+.conf-row { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; gap: 12px; }
+.conf-row:last-child { border-bottom: none; }
+.conf-key { color: var(--ink-3); }
+.conf-val { font-weight: 600; color: var(--ink); text-align: right; }
+.wa-btn {
+  width: 100%; padding: 13px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); font-size: 14px; font-weight: 500; color: var(--ink);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  gap: 8px; font-family: inherit;
+}
+.wa-btn:hover { background: #f2f1ee; }
+.restart { font-size: 12px; color: var(--ink-3); text-align: center; margin-top: 1rem; cursor: pointer; }
+.restart:hover { color: var(--ink); }
+
+/* Btn spinner */
+.btn-spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; display: none;
+}
+.btn.loading .btn-spinner { display: block; }
+.btn.loading .btn-text { opacity: 0.7; }
+
+@media (max-width: 480px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="brand">Enrichwise</div>
+
+  <!-- STEP 1: Mobile -->
+  <div class="screen active" id="s0">
+    <h1>Book an appointment</h1>
+    <p class="sub">Enter your mobile number to get started.</p>
+    <div class="phone-row">
+      <div class="prefix">+91</div>
+      <input type="tel" id="mob" maxlength="10" placeholder="Mobile number" autocomplete="tel"
+        oninput="onMobInput()">
+    </div>
+    <div class="error-msg" id="mobError">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Please enter a valid 10-digit mobile number
+    </div>
+    <button class="btn" id="sendBtn" disabled onclick="sendOtp()">
+      <div class="btn-spinner"></div>
+      <span class="btn-text">Get OTP on WhatsApp</span>
+    </button>
+  </div>
+
+  <!-- STEP 2: OTP -->
+  <div class="screen" id="s1">
+    <button class="back" onclick="go('s0')">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </button>
+    <h1>Enter OTP</h1>
+    <p class="sub">Sent to +91 <strong id="mobDisplay"></strong> via WhatsApp</p>
+    <div class="otp-row">
+      <input class="otp-box" id="o0" maxlength="1" type="text" inputmode="numeric" autocomplete="one-time-code" oninput="otpType(0)" onkeydown="otpKey(event,0)" onpaste="otpPaste(event)">
+      <input class="otp-box" id="o1" maxlength="1" type="text" inputmode="numeric" oninput="otpType(1)" onkeydown="otpKey(event,1)">
+      <input class="otp-box" id="o2" maxlength="1" type="text" inputmode="numeric" oninput="otpType(2)" onkeydown="otpKey(event,2)">
+      <input class="otp-box" id="o3" maxlength="1" type="text" inputmode="numeric" oninput="otpType(3)" onkeydown="otpKey(event,3)">
+      <input class="otp-box" id="o4" maxlength="1" type="text" inputmode="numeric" oninput="otpType(4)" onkeydown="otpKey(event,4)">
+      <input class="otp-box" id="o5" maxlength="1" type="text" inputmode="numeric" oninput="otpType(5)" onkeydown="otpKey(event,5)">
+    </div>
+    <div class="error-msg" id="otpError">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Incorrect OTP. Please try again.
+    </div>
+    <button class="btn" id="verBtn" disabled onclick="verifyOtp()">
+      <div class="btn-spinner"></div>
+      <span class="btn-text">Verify &amp; continue</span>
+    </button>
+    <div class="resend-wrap">
+      Didn't receive it?
+      <span class="resend-link disabled" id="resendLink" onclick="resendOtp()">
+        Resend in <span class="timer" id="timerDisplay">30s</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- STEP 3: Corpus -->
+  <div class="screen" id="s2">
+    <button class="back" onclick="go('s1')">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </button>
+    <h1>What's your existing corpus?</h1>
+    <p class="sub">We'll take you to the right booking page.</p>
+    <div class="corpus-list">
+      <div class="corpus-card" onclick="pickCorpus(this,'under50','callback','Under ₹50L')">
+        <div class="corpus-text">
+          <div class="corpus-amount">Under ₹50L</div>
+          <div class="corpus-desc">Mutual funds, SIPs, starter portfolios</div>
+        </div>
+        <div class="corpus-right">
+          <span class="tag tag-cb">Callback</span>
+          <div class="radio"><div class="radio-dot"></div></div>
+        </div>
+      </div>
+      <div class="corpus-card" onclick="pickCorpus(this,'50to1cr','callback','₹50L – ₹1 Cr')">
+        <div class="corpus-text">
+          <div class="corpus-amount">₹50L – ₹1 Cr</div>
+          <div class="corpus-desc">Growing wealth, consolidation</div>
+        </div>
+        <div class="corpus-right">
+          <span class="tag tag-cb">Callback</span>
+          <div class="radio"><div class="radio-dot"></div></div>
+        </div>
+      </div>
+      <div class="corpus-card" onclick="pickCorpus(this,'1to5cr','instant','₹1 Cr – ₹5 Cr')">
+        <div class="corpus-text">
+          <div class="corpus-amount">₹1 Cr – ₹5 Cr</div>
+          <div class="corpus-desc">PMS, structured products</div>
+        </div>
+        <div class="corpus-right">
+          <span class="tag tag-instant">Instant booking</span>
+          <div class="radio"><div class="radio-dot"></div></div>
+        </div>
+      </div>
+      <div class="corpus-card" onclick="pickCorpus(this,'5crplus','instant','₹5 Cr+')">
+        <div class="corpus-text">
+          <div class="corpus-amount">₹5 Cr+</div>
+          <div class="corpus-desc">Family office, AIF, bespoke</div>
+        </div>
+        <div class="corpus-right">
+          <span class="tag tag-instant">Instant booking</span>
+          <div class="radio"><div class="radio-dot"></div></div>
+        </div>
+      </div>
+    </div>
+    <button class="btn" id="corpusBtn" disabled onclick="goBooking()">
+      <span class="btn-text">Continue</span>
+    </button>
+  </div>
+
+  <!-- STEP 4A: Instant slot picker -->
+  <div class="screen" id="s3a">
+    <button class="back" onclick="go('s2')">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </button>
+    <h1>Pick a slot</h1>
+    <p class="sub">Choose a time — you'll confirm on the Zoho booking page.</p>
+    <div class="advisor">
+      <div class="av">RK</div>
+      <div>
+        <div class="av-name">Rohan Kapoor</div>
+        <div class="av-role">Senior Wealth Advisor · 11 yrs experience</div>
+      </div>
+    </div>
+    <div class="day-label">Today</div>
+    <div class="slot-grid">
+      <button class="slot" onclick="pickSlot(this,'10:30 AM')">10:30 AM</button>
+      <button class="slot" onclick="pickSlot(this,'12:00 PM')">12:00 PM</button>
+      <button class="slot" onclick="pickSlot(this,'3:30 PM')">3:30 PM</button>
+    </div>
+    <div class="day-label">Tomorrow</div>
+    <div class="slot-grid">
+      <button class="slot" onclick="pickSlot(this,'9:00 AM')">9:00 AM</button>
+      <button class="slot" onclick="pickSlot(this,'11:00 AM')">11:00 AM</button>
+      <button class="slot" onclick="pickSlot(this,'2:00 PM')">2:00 PM</button>
+    </div>
+    <button class="btn" id="slotBtn" disabled onclick="redirectInstant()">
+      <div class="btn-spinner"></div>
+      <span class="btn-text">Book appointment →</span>
+    </button>
+    <div class="redirect-loading" id="loadInstant">
+      <div class="spinner"></div>
+      <p>Opening your booking page...</p>
+    </div>
+  </div>
+
+  <!-- STEP 4B: Callback -->
+  <div class="screen" id="s3b">
+    <button class="back" onclick="go('s2')">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </button>
+    <h1>We'll call you back</h1>
+    <p class="sub">Our advisor will reach you within 4 working hours.</p>
+    <div class="info-box">
+      <div class="info-title">What happens next</div>
+      <div class="info-body">
+        Our team will call you on <strong>+91 <span id="cbMob"></span></strong>.
+        They'll understand your goals and schedule a detailed session at a time that suits you.
+      </div>
+    </div>
+    <button class="btn" onclick="redirectCallback()">
+      <div class="btn-spinner"></div>
+      <span class="btn-text">Request callback →</span>
+    </button>
+    <div class="redirect-loading" id="loadCallback">
+      <div class="spinner"></div>
+      <p>Opening your booking page...</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ── CONFIG: Replace with your actual Zoho Bookings URLs ── */
+var ZOHO_INSTANT_URL  = 'https://bookings.zoho.in/portal/YOUR_PORTAL/Priority-Wealth-Session';
+var ZOHO_CALLBACK_URL = 'https://bookings.zoho.in/portal/YOUR_PORTAL/Discovery-Call';
+/* ── CONFIG: Your deployed API base URL (Vercel URL after deploy) ── */
+var API_BASE = 'https://YOUR_VERCEL_URL.vercel.app';
+/* ────────────────────────────────────────────────────────── */
+
+var state = { mob: '', corpus: '', corpusLabel: '', track: '', slot: '' };
+var timerInterval = null;
+
+function go(id) {
+  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ── Step 1: Mobile ── */
+function onMobInput() {
+  var val = document.getElementById('mob').value.replace(/\D/g, '');
+  document.getElementById('mob').value = val;
+  document.getElementById('sendBtn').disabled = val.length !== 10;
+  document.getElementById('mobError').classList.remove('show');
+}
+
+async function sendOtp() {
+  var mob = document.getElementById('mob').value.replace(/\D/g, '');
+  if (mob.length !== 10) {
+    document.getElementById('mobError').classList.add('show');
+    return;
+  }
+  setLoading('sendBtn', true);
+  try {
+    var res = await fetch(API_BASE + '/api/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobile: mob })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
+    state.mob = mob;
+    document.getElementById('mobDisplay').textContent = mob;
+    document.getElementById('cbMob').textContent = mob;
+    go('s1');
+    startTimer(30);
+    setTimeout(function() { document.getElementById('o0').focus(); }, 100);
+  } catch (err) {
+    document.getElementById('mobError').textContent = err.message || 'Could not send OTP. Please try again.';
+    document.getElementById('mobError').classList.add('show');
+  }
+  setLoading('sendBtn', false);
+}
+
+/* ── Step 2: OTP ── */
+function otpType(idx) {
+  var boxes = getBoxes();
+  var val = boxes[idx].value.replace(/\D/g, '');
+  boxes[idx].value = val;
+  if (val.length === 1 && idx < 5) boxes[idx+1].focus();
+  var full = boxes.map(function(b) { return b.value; }).join('');
+  document.getElementById('verBtn').disabled = full.length < 6;
+  document.getElementById('otpError').classList.remove('show');
+  boxes.forEach(function(b) { b.classList.remove('err'); });
+}
+
+function otpKey(e, idx) {
+  if (e.key === 'Backspace') {
+    var boxes = getBoxes();
+    if (!boxes[idx].value && idx > 0) {
+      boxes[idx-1].value = '';
+      boxes[idx-1].focus();
+    }
+  }
+}
+
+function otpPaste(e) {
+  var data = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').slice(0, 6);
+  if (!data) return;
+  e.preventDefault();
+  var boxes = getBoxes();
+  for (var i = 0; i < 6; i++) boxes[i].value = data[i] || '';
+  var last = Math.min(data.length, 6) - 1;
+  boxes[Math.max(0, last)].focus();
+  document.getElementById('verBtn').disabled = data.length < 6;
+}
+
+function getBoxes() {
+  return [0,1,2,3,4,5].map(function(i) { return document.getElementById('o'+i); });
+}
+
+async function verifyOtp() {
+  var code = getBoxes().map(function(b) { return b.value; }).join('');
+  setLoading('verBtn', true);
+  try {
+    var res = await fetch(API_BASE + '/api/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobile: state.mob, otp: code })
+    });
+    var data = await res.json();
+    if (!res.ok || !data.valid) throw new Error('invalid');
+    clearInterval(timerInterval);
+    go('s2');
+  } catch (err) {
+    getBoxes().forEach(function(b) { b.classList.add('err'); b.value = ''; });
+    document.getElementById('o0').focus();
+    document.getElementById('verBtn').disabled = true;
+    document.getElementById('otpError').classList.add('show');
+  }
+  setLoading('verBtn', false);
+}
+
+async function resendOtp() {
+  var link = document.getElementById('resendLink');
+  if (link.classList.contains('disabled')) return;
+  getBoxes().forEach(function(b) { b.value = ''; b.classList.remove('err'); });
+  document.getElementById('verBtn').disabled = true;
+  document.getElementById('otpError').classList.remove('show');
+  try {
+    await fetch(API_BASE + '/api/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobile: state.mob })
+    });
+  } catch(e) {}
+  startTimer(30);
+  document.getElementById('o0').focus();
+}
+
+function startTimer(secs) {
+  clearInterval(timerInterval);
+  var link = document.getElementById('resendLink');
+  var display = document.getElementById('timerDisplay');
+  link.classList.add('disabled');
+  var remaining = secs;
+  display.textContent = remaining + 's';
+  timerInterval = setInterval(function() {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      link.classList.remove('disabled');
+      link.innerHTML = 'Resend OTP';
+    } else {
+      display.textContent = remaining + 's';
+    }
+  }, 1000);
+}
+
+/* ── Step 3: Corpus ── */
+function pickCorpus(el, corpus, track, label) {
+  document.querySelectorAll('.corpus-card').forEach(function(c) { c.classList.remove('selected'); });
+  el.classList.add('selected');
+  state.corpus = corpus; state.track = track; state.corpusLabel = label;
+  document.getElementById('corpusBtn').disabled = false;
+}
+
+function goBooking() {
+  if (state.track === 'instant') { go('s3a'); }
+  else { go('s3b'); }
+}
+
+/* ── Step 4A: Instant ── */
+function pickSlot(el, slot) {
+  document.querySelectorAll('.slot').forEach(function(s) { s.classList.remove('sel'); });
+  el.classList.add('sel');
+  state.slot = slot;
+  document.getElementById('slotBtn').disabled = false;
+}
+
+function redirectInstant() {
+  document.getElementById('slotBtn').style.display = 'none';
+  document.getElementById('loadInstant').classList.add('show');
+  var url = ZOHO_INSTANT_URL
+    + '?mobile=' + encodeURIComponent('+91' + state.mob)
+    + '&corpus=' + encodeURIComponent(state.corpusLabel)
+    + '&slot='   + encodeURIComponent(state.slot);
+  setTimeout(function() { window.location.href = url; }, 1200);
+}
+
+/* ── Step 4B: Callback ── */
+function redirectCallback() {
+  var btn = document.querySelector('#s3b .btn');
+  btn.style.display = 'none';
+  document.getElementById('loadCallback').classList.add('show');
+  var url = ZOHO_CALLBACK_URL
+    + '?mobile=' + encodeURIComponent('+91' + state.mob)
+    + '&corpus=' + encodeURIComponent(state.corpusLabel);
+  setTimeout(function() { window.location.href = url; }, 1200);
+}
+
+/* ── Helpers ── */
+function setLoading(btnId, on) {
+  var btn = document.getElementById(btnId);
+  if (on) { btn.classList.add('loading'); btn.disabled = true; }
+  else { btn.classList.remove('loading'); btn.disabled = false; }
+}
+</script>
+</body>
+</html>
