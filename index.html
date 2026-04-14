@@ -372,11 +372,11 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 </div>
 
 <script>
-/* ── CONFIG: Replace with your actual Zoho Bookings URLs ── */
-var ZOHO_INSTANT_URL  = 'https://bookings.zoho.in/portal/YOUR_PORTAL/Priority-Wealth-Session';
-var ZOHO_CALLBACK_URL = 'https://bookings.zoho.in/portal/YOUR_PORTAL/Discovery-Call';
-/* ── CONFIG: Your deployed API base URL (Vercel URL after deploy) ── */
-var API_BASE = 'https://YOUR_VERCEL_URL.vercel.app';
+/* ── CONFIG: Zoho Bookings URLs ── */
+var ZOHO_INSTANT_URL  = 'https://enrichwise.zohobookings.in/#/279048000000841122'; // TEST Private consultation (1Cr+)
+var ZOHO_CALLBACK_URL = 'https://enrichwise.zohobookings.in/#/279048000000841186'; // TEST Low AUM Private consultation (under 1Cr)
+/* API_BASE empty = call /api/* on the same origin (Vercel serves HTML + API together) */
+var API_BASE = '';
 /* ────────────────────────────────────────────────────────── */
 
 var state = { mob: '', corpus: '', corpusLabel: '', track: '', slot: '' };
