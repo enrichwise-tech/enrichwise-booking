@@ -2,13 +2,10 @@
  * POST /api/send-otp
  * Body: { mobile: "9876543210" }
  *
- * Generates a 6-digit OTP, stores it in Vercel KV with a 10-min TTL,
+ * Generates a 6-digit OTP, stores it in Redis with a 10-min TTL,
  * then sends it via WATI WhatsApp template message.
  */
-
-import { kv } from '@vercel/kv';
-
-export const config = { runtime: 'edge' };
+import { getRedis } from './_redis.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -17,88 +14,89 @@ const CORS = {
   'Content-Type': 'application/json'
 };
 
+function json(status, body) {
+  return new Response(JSON.stringify(body), { status, headers: CORS });
+}
+
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS });
   }
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: CORS });
+    return json(405, { error: 'Method not allowed' });
   }
 
   let body;
   try {
     body = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: CORS });
+    return json(400, { error: 'Invalid JSON' });
   }
 
   const { mobile } = body;
 
   /* ── Validate mobile ── */
   if (!mobile || !/^\d{10}$/.test(mobile)) {
-    return new Response(
-      JSON.stringify({ error: 'Please enter a valid 10-digit mobile number' }),
-      { status: 400, headers: CORS }
-    );
+    return json(400, { error: 'Please enter a valid 10-digit mobile number' });
+  }
+
+  let redis;
+  try {
+    redis = await getRedis();
+  } catch (err) {
+    console.error('Redis connect error:', err);
+    return json(500, { error: 'Service unavailable. Please try again.' });
   }
 
   /* ── Rate limit: max 3 OTPs per mobile per 10 minutes ── */
   const rateLimitKey = `ratelimit:${mobile}`;
-  const attempts = await kv.incr(rateLimitKey);
-  if (attempts === 1) await kv.expire(rateLimitKey, 600); // 10 min window
+  const attempts = await redis.incr(rateLimitKey);
+  if (attempts === 1) await redis.expire(rateLimitKey, 600);
   if (attempts > 3) {
-    return new Response(
-      JSON.stringify({ error: 'Too many attempts. Please try again after 10 minutes.' }),
-      { status: 429, headers: CORS }
-    );
+    return json(429, { error: 'Too many attempts. Please try again after 10 minutes.' });
   }
 
-  /* ── Generate OTP ── */
-  const otp = String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+  /* ── Generate 6-digit OTP ── */
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
 
-  /* ── Reset wrong-attempt counter from any previous OTP on this number ── */
-  await kv.del(`verify_attempts:${mobile}`);
+  /* ── Reset wrong-attempt counter from any previous OTP ── */
+  await redis.del(`verify_attempts:${mobile}`);
 
-  /* ── Store OTP in KV with 10-minute TTL ── */
-  await kv.set(`otp:${mobile}`, otp, { ex: 600 });
+  /* ── Store OTP with 10-minute TTL ── */
+  await redis.set(`otp:${mobile}`, otp, { EX: 600 });
 
   /* ── Send via WATI ── */
-  const watiEndpoint = `${process.env.WATI_API_URL}/api/v1/sendTemplateMessage`;
+  const watiBase = (process.env.WATI_API_URL || '').replace(/\/$/, '');
+  const watiEndpoint = `${watiBase}/api/v1/sendTemplateMessage?whatsappNumber=91${mobile}`;
 
   const watiPayload = {
-    template_name: process.env.WATI_TEMPLATE_NAME, // e.g. "otp_verification"
+    template_name: process.env.WATI_TEMPLATE_NAME,
     broadcast_name: `otp_${mobile}_${Date.now()}`,
-    receivers: [
-      {
-        whatsappNumber: `91${mobile}`,
-        customParams: [
-          { name: '1', value: otp },           // {{1}} in your template = OTP
-          { name: '2', value: '10 minutes' }   // {{2}} = expiry (optional)
-        ]
-      }
+    parameters: [
+      { name: '1', value: otp },
+      { name: '2', value: '10 minutes' }
     ]
   };
 
-  const watiRes = await fetch(watiEndpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.WATI_API_TOKEN}`
-    },
-    body: JSON.stringify(watiPayload)
-  });
+  try {
+    const watiRes = await fetch(watiEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.WATI_API_TOKEN}`
+      },
+      body: JSON.stringify(watiPayload)
+    });
 
-  if (!watiRes.ok) {
-    const err = await watiRes.text();
-    console.error('WATI error:', err);
-    return new Response(
-      JSON.stringify({ error: 'Could not send OTP. Please try again.' }),
-      { status: 502, headers: CORS }
-    );
+    if (!watiRes.ok) {
+      const errText = await watiRes.text();
+      console.error('WATI error:', watiRes.status, errText);
+      return json(502, { error: 'Could not send OTP. Please try again.' });
+    }
+  } catch (err) {
+    console.error('WATI fetch error:', err);
+    return json(502, { error: 'Could not send OTP. Please try again.' });
   }
 
-  return new Response(
-    JSON.stringify({ success: true, message: 'OTP sent via WhatsApp' }),
-    { status: 200, headers: CORS }
-  );
+  return json(200, { success: true, message: 'OTP sent via WhatsApp' });
 }

@@ -1,8 +1,8 @@
 {
-  "name": "wealth-booking",
+  "name": "enrichwise-booking",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@vercel/kv": "^1.0.0"
+    "redis": "^4.7.0"
   }
 }
