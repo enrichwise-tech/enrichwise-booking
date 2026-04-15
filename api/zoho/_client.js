@@ -19,10 +19,18 @@ const ZOHO_API = 'https://www.zohoapis.in';
 const TOKEN_KEY = 'zoho:access_token';
 
 async function refreshAccessToken() {
+  const clientId = (process.env.ZOHO_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.ZOHO_CLIENT_SECRET || '').trim();
+  const refreshToken = (process.env.ZOHO_REFRESH_TOKEN || '').trim();
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error(`Zoho env vars missing (hasClientId=${!!clientId} hasSecret=${!!clientSecret} hasRefresh=${!!refreshToken})`);
+  }
+
   const params = new URLSearchParams({
-    refresh_token: process.env.ZOHO_REFRESH_TOKEN,
-    client_id: process.env.ZOHO_CLIENT_ID,
-    client_secret: process.env.ZOHO_CLIENT_SECRET,
+    refresh_token: refreshToken,
+    client_id: clientId,
+    client_secret: clientSecret,
     grant_type: 'refresh_token'
   });
 
