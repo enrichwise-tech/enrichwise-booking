@@ -103,15 +103,19 @@ export default async function handler(req, res) {
 
     console.log('[zoho/book] response status=', r.status, 'data=', JSON.stringify(r.data).slice(0, 600));
 
-    if (!r.ok) {
-      return res.status(r.status || 502).json({
-        error: 'Booking failed',
+    const rv = r.data?.response?.returnvalue || {};
+    // Zoho returns HTTP 200 even for failures — the real status lives in the body.
+    const innerStatus = rv.status || r.data?.response?.status;
+    const innerMessage = rv.message || '';
+    const looksLikeFailure = innerStatus === 'failure' || /mandatory|invalid|error/i.test(innerMessage);
+
+    if (!r.ok || looksLikeFailure) {
+      return res.status(r.ok ? 502 : (r.status || 502)).json({
+        error: innerMessage || 'Booking failed',
         details: r.data
       });
     }
 
-    // Zoho's success shape: { response: { returnvalue: { booking_id, summary_url, ... } } }
-    const rv = r.data?.response?.returnvalue || r.data?.response || r.data || {};
     return res.status(200).json({
       ok: true,
       booking_id: rv.booking_id || rv.id || null,
