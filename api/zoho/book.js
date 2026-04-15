@@ -61,8 +61,9 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const { track, date, slot, name, email, mobile, corpus, topics, mode, platform, staff_ids } = body;
+  const countryCode = String(body.country_code || '91').replace(/\D/g, '') || '91';
 
-  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, topics, mode, platform, staff_ids });
+  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, country_code: countryCode, topics, mode, platform, staff_ids });
 
   if (!track || !['instant', 'callback'].includes(track)) {
     return res.status(400).json({ error: 'Invalid track' });
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
   if (!date || !slot || !name || !email || !mobile) {
     return res.status(400).json({ error: 'Missing required fields (date, slot, name, email, mobile)' });
   }
-  if (!/^\d{10}$/.test(mobile)) {
+  if (!/^\d{6,15}$/.test(String(mobile))) {
     return res.status(400).json({ error: 'Invalid mobile number' });
   }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -101,7 +102,7 @@ export default async function handler(req, res) {
   const customerDetails = {
     name,
     email,
-    phone_number: `+91${mobile}`
+    phone_number: `+${countryCode}${mobile}`
   };
 
   const additionalFields = {
@@ -166,7 +167,7 @@ export default async function handler(req, res) {
   if (!rvSuccess) {
     sendAlert('Booking failed', {
       client: name,
-      mobile: `+91${mobile}`,
+      mobile: `+${countryCode}${mobile}`,
       track,
       date,
       slot,
@@ -191,7 +192,7 @@ export default async function handler(req, res) {
     console.error('[zoho/book] error:', err.message);
     sendAlert('Booking crashed', {
       client: name,
-      mobile: `+91${mobile}`,
+      mobile: `+${countryCode}${mobile}`,
       track,
       date,
       slot,

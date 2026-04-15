@@ -74,13 +74,19 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
   overflow: hidden; background: var(--surface); transition: border-color 0.15s;
 }
 .phone-row:focus-within { border-color: var(--brand); }
-.prefix {
-  padding: 0 14px; font-size: 15px; color: var(--ink-2);
-  border-right: 1px solid var(--border);
-  display: flex; align-items: center; background: #f2f1ee; white-space: nowrap;
+.cc-select {
+  padding: 0 8px 0 12px; font-size: 15px; color: var(--ink);
+  border: none; border-right: 1px solid var(--border);
+  background: #f2f1ee; font-family: inherit; outline: none;
+  cursor: pointer; max-width: 110px;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 16 16' fill='none'><path d='M4 6l4 4 4-4' stroke='%235a5a55' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 26px;
 }
 .phone-row input {
-  flex: 1; border: none; padding: 13px 14px; font-size: 16px;
+  flex: 1; min-width: 0; border: none; padding: 13px 14px; font-size: 16px;
   color: var(--ink); background: transparent; outline: none; font-family: inherit;
 }
 
@@ -123,27 +129,38 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .timer { font-variant-numeric: tabular-nums; }
 
 /* Corpus cards */
-.corpus-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 1.25rem; }
+.corpus-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 1.5rem; }
 .corpus-card {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-lg);
-  background: var(--surface); cursor: pointer; transition: border-color 0.15s, background 0.15s; gap: 12px;
+  padding: 22px 22px; border: 1.5px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, transform 0.1s, box-shadow 0.18s;
+  gap: 14px;
 }
-.corpus-card:hover { border-color: var(--brand); }
-.corpus-card.selected { border-color: var(--brand); background: var(--brand-light); }
-.corpus-text { flex: 1; }
-.corpus-amount { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
-.corpus-desc { font-size: 12px; color: var(--ink-3); }
-.corpus-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
-.tag { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 100px; white-space: nowrap; }
-.tag-instant { background: var(--brand-light); color: var(--brand-text); }
-.tag-cb { background: #f2f1ee; color: var(--ink-3); }
-.radio {
-  width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border);
-  display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0;
+.corpus-card:hover {
+  border-color: var(--brand);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(29, 158, 117, 0.08);
 }
-.corpus-card.selected .radio { border-color: var(--brand); background: var(--brand); }
-.radio-dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.corpus-card.selected {
+  border-color: var(--brand);
+  background: var(--brand-light);
+  box-shadow: 0 2px 8px rgba(29, 158, 117, 0.12);
+}
+.corpus-amount {
+  font-size: 17px; font-weight: 600; color: var(--ink);
+  letter-spacing: -0.2px;
+}
+.corpus-card.selected .corpus-amount { color: var(--brand-text); }
+.corpus-check {
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 1.5px solid var(--border); background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  color: transparent; flex-shrink: 0; transition: all 0.18s;
+}
+.corpus-card.selected .corpus-check {
+  border-color: var(--brand); background: var(--brand); color: #fff;
+}
 
 /* Slots */
 .day-label { font-size: 12px; font-weight: 600; color: var(--ink-3); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -303,13 +320,29 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     <h1>Book an appointment</h1>
     <p class="sub">Enter your mobile number to get started.</p>
     <div class="phone-row">
-      <div class="prefix">+91</div>
-      <input type="tel" id="mob" maxlength="10" placeholder="Mobile number" autocomplete="tel"
+      <select class="cc-select" id="cc" onchange="onMobInput()" aria-label="Country code">
+        <option value="91" data-len="10" selected>🇮🇳 +91</option>
+        <option value="1" data-len="10">🇺🇸 +1</option>
+        <option value="44" data-len="10">🇬🇧 +44</option>
+        <option value="971" data-len="9">🇦🇪 +971</option>
+        <option value="65" data-len="8">🇸🇬 +65</option>
+        <option value="966" data-len="9">🇸🇦 +966</option>
+        <option value="974" data-len="8">🇶🇦 +974</option>
+        <option value="968" data-len="8">🇴🇲 +968</option>
+        <option value="973" data-len="8">🇧🇭 +973</option>
+        <option value="965" data-len="8">🇰🇼 +965</option>
+        <option value="61" data-len="9">🇦🇺 +61</option>
+        <option value="852" data-len="8">🇭🇰 +852</option>
+        <option value="49" data-len="11">🇩🇪 +49</option>
+        <option value="33" data-len="9">🇫🇷 +33</option>
+        <option value="353" data-len="9">🇮🇪 +353</option>
+      </select>
+      <input type="tel" id="mob" maxlength="15" placeholder="Mobile number" autocomplete="tel"
         oninput="onMobInput()">
     </div>
     <div class="error-msg" id="mobError">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
-      Please enter a valid 10-digit mobile number
+      <span id="mobErrorText">Please enter a valid mobile number</span>
     </div>
     <button class="btn" id="sendBtn" disabled onclick="sendOtp()">
       <div class="btn-spinner"></div>
@@ -324,7 +357,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       Back
     </button>
     <h1>Enter OTP</h1>
-    <p class="sub">Sent to +91 <strong id="mobDisplay"></strong> via WhatsApp</p>
+    <p class="sub">Sent to <strong id="mobDisplay"></strong> via WhatsApp</p>
     <div class="otp-row">
       <input class="otp-box" id="o0" maxlength="1" type="text" inputmode="numeric" autocomplete="one-time-code" oninput="otpType(0)" onkeydown="otpKey(event,0)" onpaste="otpPaste(event)">
       <input class="otp-box" id="o1" maxlength="1" type="text" inputmode="numeric" oninput="otpType(1)" onkeydown="otpKey(event,1)">
@@ -358,44 +391,22 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     <h1>What's your existing corpus?</h1>
     <p class="sub">Helps us match you with the right advisor.</p>
     <div class="corpus-list">
-      <div class="corpus-card" onclick="pickCorpus(this,'under50','callback','Under ₹50L')">
-        <div class="corpus-text">
-          <div class="corpus-amount">Under ₹50L</div>
-          <div class="corpus-desc">Mutual funds, SIPs, starter portfolios</div>
-        </div>
-        <div class="corpus-right">
-          <span class="tag tag-cb">Callback</span>
-          <div class="radio"><div class="radio-dot"></div></div>
-        </div>
-      </div>
-      <div class="corpus-card" onclick="pickCorpus(this,'50to1cr','callback','₹50L – ₹1 Cr')">
-        <div class="corpus-text">
-          <div class="corpus-amount">₹50L – ₹1 Cr</div>
-          <div class="corpus-desc">Growing wealth, consolidation</div>
-        </div>
-        <div class="corpus-right">
-          <span class="tag tag-cb">Callback</span>
-          <div class="radio"><div class="radio-dot"></div></div>
+      <div class="corpus-card" onclick="pickCorpus(this,'under1cr','gbp','Under ₹1 Cr')">
+        <div class="corpus-amount">Under ₹1 Cr</div>
+        <div class="corpus-check">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L7 12l6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
       </div>
       <div class="corpus-card" onclick="pickCorpus(this,'1to5cr','instant','₹1 Cr – ₹5 Cr')">
-        <div class="corpus-text">
-          <div class="corpus-amount">₹1 Cr – ₹5 Cr</div>
-          <div class="corpus-desc">PMS, structured products</div>
-        </div>
-        <div class="corpus-right">
-          <span class="tag tag-instant">Instant booking</span>
-          <div class="radio"><div class="radio-dot"></div></div>
+        <div class="corpus-amount">₹1 Cr – ₹5 Cr</div>
+        <div class="corpus-check">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L7 12l6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
       </div>
       <div class="corpus-card" onclick="pickCorpus(this,'5crplus','instant','₹5 Cr+')">
-        <div class="corpus-text">
-          <div class="corpus-amount">₹5 Cr+</div>
-          <div class="corpus-desc">Family office, AIF, bespoke</div>
-        </div>
-        <div class="corpus-right">
-          <span class="tag tag-instant">Instant booking</span>
-          <div class="radio"><div class="radio-dot"></div></div>
+        <div class="corpus-amount">₹5 Cr+</div>
+        <div class="corpus-check">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L7 12l6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
       </div>
     </div>
@@ -499,7 +510,6 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       <div class="conf-row"><span class="conf-key">Mobile</span><span class="conf-val" id="cMobile"></span></div>
       <div class="conf-row"><span class="conf-key">Service</span><span class="conf-val" id="cService"></span></div>
       <div class="conf-row"><span class="conf-key">Date &amp; time</span><span class="conf-val" id="cWhen"></span></div>
-      <div class="conf-row"><span class="conf-key">Corpus</span><span class="conf-val" id="cCorpus"></span></div>
     </div>
     <div class="restart" onclick="location.reload()">Book another appointment</div>
   </div>
@@ -510,8 +520,14 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 /* API_BASE empty = same-origin Vercel deployment */
 var API_BASE = '';
 
+/* ── CONFIG: Zoho Form URL for clients with corpus under ₹1 Cr ──
+   TODO: Replace with your real GBP form URL from Zoho Forms.
+   Example: 'https://forms.zohopublic.in/enrichwise/form/GBPFormName/formperma/ABC123'
+*/
+var GBP_FORM_URL = 'https://forms.zohopublic.in/enrichwise/form/GBPForm/formperma/REPLACE_ME';
+
 var state = {
-  mob: '', corpus: '', corpusLabel: '', track: '',
+  mob: '', cc: '91', corpus: '', corpusLabel: '', track: '',
   name: '', email: '',
   topics: [],        // multi-select: Investments / Taxation / Insurance
   mode: '',          // single: Normal call / Whatsapp call / Google meet / Zoom call
@@ -528,16 +544,28 @@ function go(id) {
 }
 
 /* ── Step 1: Mobile ── */
+function getExpectedLen() {
+  var ccEl = document.getElementById('cc');
+  var opt = ccEl.options[ccEl.selectedIndex];
+  return parseInt(opt.getAttribute('data-len') || '10', 10);
+}
+
 function onMobInput() {
   var val = document.getElementById('mob').value.replace(/\D/g, '');
   document.getElementById('mob').value = val;
-  document.getElementById('sendBtn').disabled = val.length !== 10;
+  var expected = getExpectedLen();
+  // Accept exact length, or ±1 for countries with variable lengths
+  var valid = val.length >= expected && val.length <= expected + 1;
+  document.getElementById('sendBtn').disabled = !valid;
   document.getElementById('mobError').classList.remove('show');
 }
 
 async function sendOtp() {
   var mob = document.getElementById('mob').value.replace(/\D/g, '');
-  if (mob.length !== 10) {
+  var cc = document.getElementById('cc').value;
+  var expected = getExpectedLen();
+  if (mob.length < expected || mob.length > 15) {
+    document.getElementById('mobErrorText').textContent = 'Please enter a valid mobile number';
     document.getElementById('mobError').classList.add('show');
     return;
   }
@@ -546,12 +574,13 @@ async function sendOtp() {
     var res = await fetch(API_BASE + '/api/send-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mobile: mob })
+      body: JSON.stringify({ mobile: mob, country_code: cc })
     });
     var data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
     state.mob = mob;
-    document.getElementById('mobDisplay').textContent = mob;
+    state.cc = cc;
+    document.getElementById('mobDisplay').textContent = '+' + cc + ' ' + mob;
     go('s1');
     startTimer(30);
     setTimeout(function() { document.getElementById('o0').focus(); }, 100);
@@ -606,7 +635,7 @@ async function verifyOtp() {
     var res = await fetch(API_BASE + '/api/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mobile: state.mob, otp: code })
+      body: JSON.stringify({ mobile: state.mob, country_code: state.cc, otp: code })
     });
     var data = await res.json();
     if (!res.ok || !data.valid) throw new Error('invalid');
@@ -631,7 +660,7 @@ async function resendOtp() {
     await fetch(API_BASE + '/api/send-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mobile: state.mob })
+      body: JSON.stringify({ mobile: state.mob, country_code: state.cc })
     });
   } catch(e) {}
   startTimer(30);
@@ -666,6 +695,13 @@ function pickCorpus(el, corpus, track, label) {
 }
 
 function goBooking() {
+  if (state.track === 'gbp') {
+    // Under ₹1 Cr — redirect to the goal-based plan Zoho form instead of the
+    // call-booking flow. Pass mobile as a URL param in case the form pre-fills.
+    var url = GBP_FORM_URL + '?mobile=' + encodeURIComponent('+' + state.cc + state.mob);
+    window.location.href = url;
+    return;
+  }
   go('s3');
   setTimeout(function() { document.getElementById('fName').focus(); }, 100);
 }
@@ -852,17 +888,18 @@ async function bookAppointment() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        track:     state.track,
-        date:      state.slotDate,
-        slot:      state.slotTime,
-        name:      state.name,
-        email:     state.email,
-        mobile:    state.mob,
-        corpus:    state.corpusLabel,
-        topics:    state.topics,
-        mode:      state.mode,
-        platform:  state.platform,
-        staff_ids: state.slotStaffIds
+        track:        state.track,
+        date:         state.slotDate,
+        slot:         state.slotTime,
+        name:         state.name,
+        email:        state.email,
+        mobile:       state.mob,
+        country_code: state.cc,
+        corpus:       state.corpusLabel,
+        topics:       state.topics,
+        mode:         state.mode,
+        platform:     state.platform,
+        staff_ids:    state.slotStaffIds
       })
     });
     var data = await res.json();
@@ -872,10 +909,9 @@ async function bookAppointment() {
     }
     // Populate confirmation
     document.getElementById('cName').textContent    = state.name;
-    document.getElementById('cMobile').textContent  = '+91 ' + state.mob;
-    document.getElementById('cService').textContent = state.track === 'instant' ? 'Priority Wealth Session' : 'Discovery Call';
+    document.getElementById('cMobile').textContent  = '+' + state.cc + ' ' + state.mob;
+    document.getElementById('cService').textContent = 'Priority Wealth Session';
     document.getElementById('cWhen').textContent    = state.slotDate + ' · ' + state.slotTime;
-    document.getElementById('cCorpus').textContent  = state.corpusLabel;
     go('s5');
   } catch (err) {
     document.getElementById('slotsErrorText').textContent = err.message;

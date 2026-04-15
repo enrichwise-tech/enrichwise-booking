@@ -34,11 +34,16 @@ export default async function handler(req, res) {
   // Vercel Node runtime auto-parses JSON bodies when Content-Type is application/json
   const body = req.body || {};
   const { mobile } = body;
-  console.log('[send-otp] parsed body, mobile ends with:', mobile ? String(mobile).slice(-4) : '(none)');
+  const countryCode = String(body.country_code || '91').replace(/\D/g, '') || '91';
+  console.log('[send-otp] parsed body, cc=+' + countryCode + ', mobile ends with:', mobile ? String(mobile).slice(-4) : '(none)');
 
-  if (!mobile || !/^\d{10}$/.test(mobile)) {
-    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
+  if (!mobile || !/^\d{6,15}$/.test(String(mobile))) {
+    return res.status(400).json({ error: 'Please enter a valid mobile number' });
   }
+  if (!/^\d{1,4}$/.test(countryCode)) {
+    return res.status(400).json({ error: 'Invalid country code' });
+  }
+  const fullNumber = `${countryCode}${mobile}`;
 
   let redis;
   try {
@@ -68,8 +73,8 @@ export default async function handler(req, res) {
   const otp = String(Math.floor(100000 + Math.random() * 900000));
 
   try {
-    await redis.del(`verify_attempts:${mobile}`);
-    await redis.set(`otp:${mobile}`, otp, { ex: 600 });
+    await redis.del(`verify_attempts:${fullNumber}`);
+    await redis.set(`otp:${fullNumber}`, otp, { ex: 600 });
     console.log('[send-otp] otp stored in redis');
   } catch (err) {
     console.error('[send-otp] redis store error:', err.message);
@@ -89,10 +94,10 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'WATI not configured' });
   }
 
-  const watiEndpoint = `${watiBase}/api/v1/sendTemplateMessage?whatsappNumber=91${mobile}`;
+  const watiEndpoint = `${watiBase}/api/v1/sendTemplateMessage?whatsappNumber=${fullNumber}`;
   const watiPayload = {
     template_name: templateName,
-    broadcast_name: `otp_${mobile}_${Date.now()}`,
+    broadcast_name: `otp_${fullNumber}_${Date.now()}`,
     parameters: [
       { name: '1', value: otp },
       { name: '2', value: '10 minutes' }
@@ -116,7 +121,7 @@ export default async function handler(req, res) {
 
     if (!watiRes.ok) {
       sendAlert('OTP send failed', {
-        mobile: `+91${mobile}`,
+        mobile: `+${fullNumber}`,
         wati_status: watiRes.status
       }).catch(() => {});
       return res.status(502).json({ error: 'Could not send OTP (WATI ' + watiRes.status + '). Please try again.' });
@@ -125,7 +130,7 @@ export default async function handler(req, res) {
     console.error('[send-otp] WATI fetch error:', err.name, err.message);
     const msg = err.name === 'AbortError' ? 'WATI timed out' : 'WATI unreachable';
     sendAlert('OTP send crashed', {
-      mobile: `+91${mobile}`,
+      mobile: `+${fullNumber}`,
       error: `${err.name}: ${err.message}`
     }).catch(() => {});
     return res.status(502).json({ error: msg });

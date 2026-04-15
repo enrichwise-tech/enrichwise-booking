@@ -20,10 +20,12 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const { mobile, otp } = body;
+  const countryCode = String(body.country_code || '91').replace(/\D/g, '') || '91';
 
-  if (!mobile || !otp || !/^\d{10}$/.test(mobile) || !/^\d{6}$/.test(String(otp))) {
+  if (!mobile || !otp || !/^\d{6,15}$/.test(String(mobile)) || !/^\d{6}$/.test(String(otp)) || !/^\d{1,4}$/.test(countryCode)) {
     return res.status(400).json({ valid: false, error: 'Missing or invalid mobile/otp' });
   }
+  const fullNumber = `${countryCode}${mobile}`;
 
   let redis;
   try {
@@ -36,7 +38,7 @@ export default async function handler(req, res) {
   /* ── Track wrong attempts to prevent brute force ── */
   let attempts;
   try {
-    const attemptsKey = `verify_attempts:${mobile}`;
+    const attemptsKey = `verify_attempts:${fullNumber}`;
     attempts = await redis.incr(attemptsKey);
     if (attempts === 1) await redis.expire(attemptsKey, 600);
   } catch (err) {
@@ -51,7 +53,7 @@ export default async function handler(req, res) {
   /* ── Fetch stored OTP ── */
   let stored;
   try {
-    stored = await redis.get(`otp:${mobile}`);
+    stored = await redis.get(`otp:${fullNumber}`);
   } catch (err) {
     console.error('[verify-otp] redis get error:', err.message);
     return res.status(500).json({ valid: false, error: 'Service unavailable. Please try again.' });
@@ -67,11 +69,10 @@ export default async function handler(req, res) {
 
   /* ── Valid — delete OTP so it can't be reused ── */
   try {
-    await redis.del(`otp:${mobile}`);
-    await redis.del(`verify_attempts:${mobile}`);
+    await redis.del(`otp:${fullNumber}`);
+    await redis.del(`verify_attempts:${fullNumber}`);
   } catch (err) {
     console.error('[verify-otp] redis cleanup error:', err.message);
-    // Still return valid — the OTP matched, cleanup failure isn't the client's problem
   }
 
   return res.status(200).json({ valid: true });
