@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E1F5EE"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="80" y="80" width="88" height="88" rx="20" fill="#1D9E75"/>
+  <text x="124" y="147" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="56" font-weight="700" fill="#ffffff" text-anchor="middle">E</text>
+  <text x="200" y="140" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="38" font-weight="600" fill="#085041">Enrichwise</text>
+  <text x="80" y="340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="84" font-weight="700" fill="#1a1a18" letter-spacing="-2">Book an appointment</text>
+  <text x="80" y="420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="36" font-weight="400" fill="#5a5a55">Trusted wealth advisory • OTP verified • Priority slots</text>
+  <rect x="80" y="500" width="340" height="70" rx="12" fill="#1D9E75"/>
+  <text x="250" y="546" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="26" font-weight="600" fill="#ffffff" text-anchor="middle">Get started →</text>
+</svg>

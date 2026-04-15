@@ -17,6 +17,7 @@
  * Zoho requires from_time in "dd-MMM-yyyy HH:mm:ss" 24-hour format, and staff_id.
  */
 import { zohoPost } from './_client.js';
+import { sendAlert } from '../_alert.js';
 
 const DEFAULT_INSTANT_SVC  = '279048000000841122';
 const DEFAULT_CALLBACK_SVC = '279048000000841186';
@@ -121,6 +122,17 @@ export default async function handler(req, res) {
     const looksLikeFailure = innerStatus === 'failure' || /mandatory|invalid|error/i.test(innerMessage);
 
     if (!r.ok || looksLikeFailure) {
+      // Fire-and-forget WhatsApp alert so the team sees failed bookings in real time
+      sendAlert('Booking failed', {
+        client: name,
+        mobile: `+91${mobile}`,
+        track,
+        date,
+        slot,
+        zoho_status: innerStatus || r.status,
+        zoho_message: innerMessage || '(no message)'
+      }).catch(() => {});
+
       return res.status(r.ok ? 502 : (r.status || 502)).json({
         error: innerMessage || 'Booking failed',
         details: r.data
@@ -135,6 +147,14 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[zoho/book] error:', err.message);
+    sendAlert('Booking crashed', {
+      client: name,
+      mobile: `+91${mobile}`,
+      track,
+      date,
+      slot,
+      error: err.message
+    }).catch(() => {});
     return res.status(500).json({ error: err.message });
   }
 }

@@ -6,6 +6,7 @@
  * then sends it via WATI WhatsApp template message.
  */
 import { getRedis } from './_redis.js';
+import { sendAlert } from './_alert.js';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -114,11 +115,19 @@ export default async function handler(req, res) {
     console.log('[send-otp] WATI status=', watiRes.status, 'body=', respText.slice(0, 300));
 
     if (!watiRes.ok) {
+      sendAlert('OTP send failed', {
+        mobile: `+91${mobile}`,
+        wati_status: watiRes.status
+      }).catch(() => {});
       return res.status(502).json({ error: 'Could not send OTP (WATI ' + watiRes.status + '). Please try again.' });
     }
   } catch (err) {
     console.error('[send-otp] WATI fetch error:', err.name, err.message);
     const msg = err.name === 'AbortError' ? 'WATI timed out' : 'WATI unreachable';
+    sendAlert('OTP send crashed', {
+      mobile: `+91${mobile}`,
+      error: `${err.name}: ${err.message}`
+    }).catch(() => {});
     return res.status(502).json({ error: msg });
   }
 
