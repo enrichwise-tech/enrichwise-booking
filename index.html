@@ -186,6 +186,22 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .restart { font-size: 12px; color: var(--ink-3); text-align: center; margin-top: 1rem; cursor: pointer; }
 .restart:hover { color: var(--ink); }
 
+/* Form fields (name/email) */
+.field-label {
+  display: block; font-size: 12px; font-weight: 600; color: var(--ink-2);
+  margin-bottom: 6px; margin-top: 14px; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.field {
+  width: 100%; padding: 13px 14px; font-size: 15px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); outline: none;
+  font-family: inherit; transition: border-color 0.15s;
+}
+.field:focus { border-color: var(--brand); }
+
+/* Empty slot-day state */
+.no-slots { text-align: center; padding: 1.5rem 0; font-size: 13px; color: var(--ink-3); }
+
 /* Btn spinner */
 .btn-spinner {
   width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4);
@@ -259,7 +275,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       Back
     </button>
     <h1>What's your existing corpus?</h1>
-    <p class="sub">We'll take you to the right booking page.</p>
+    <p class="sub">Helps us match you with the right advisor.</p>
     <div class="corpus-list">
       <div class="corpus-card" onclick="pickCorpus(this,'under50','callback','Under ₹50L')">
         <div class="corpus-text">
@@ -307,79 +323,82 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     </button>
   </div>
 
-  <!-- STEP 4A: Instant slot picker -->
-  <div class="screen" id="s3a">
+  <!-- STEP 4: Name + Email -->
+  <div class="screen" id="s3">
     <button class="back" onclick="go('s2')">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </button>
+    <h1>A few quick details</h1>
+    <p class="sub">So we can prepare for your session.</p>
+    <label class="field-label">Full name</label>
+    <input class="field" id="fName" type="text" placeholder="Your full name" oninput="onDetailsInput()" autocomplete="name">
+    <label class="field-label">Email</label>
+    <input class="field" id="fEmail" type="email" placeholder="you@example.com" oninput="onDetailsInput()" autocomplete="email">
+    <div class="error-msg" id="detailsError">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Please enter a valid name and email
+    </div>
+    <button class="btn" id="detailsBtn" disabled onclick="submitDetails()">
+      <div class="btn-spinner"></div>
+      <span class="btn-text">See available slots</span>
+    </button>
+  </div>
+
+  <!-- STEP 5: Real slot picker -->
+  <div class="screen" id="s4">
+    <button class="back" onclick="go('s3')">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Back
     </button>
     <h1>Pick a slot</h1>
-    <p class="sub">Choose a time — you'll confirm on the Zoho booking page.</p>
-    <div class="advisor">
-      <div class="av">RK</div>
-      <div>
-        <div class="av-name">Rohan Kapoor</div>
-        <div class="av-role">Senior Wealth Advisor · 11 yrs experience</div>
+    <p class="sub">Real-time availability — booking happens on confirmation.</p>
+    <div id="slotsContainer">
+      <div class="redirect-loading show" id="slotsLoading">
+        <div class="spinner"></div>
+        <p>Loading available slots...</p>
       </div>
     </div>
-    <div class="day-label">Today</div>
-    <div class="slot-grid">
-      <button class="slot" onclick="pickSlot(this,'10:30 AM')">10:30 AM</button>
-      <button class="slot" onclick="pickSlot(this,'12:00 PM')">12:00 PM</button>
-      <button class="slot" onclick="pickSlot(this,'3:30 PM')">3:30 PM</button>
+    <div class="error-msg" id="slotsError">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span id="slotsErrorText">Could not load slots. Please try again.</span>
     </div>
-    <div class="day-label">Tomorrow</div>
-    <div class="slot-grid">
-      <button class="slot" onclick="pickSlot(this,'9:00 AM')">9:00 AM</button>
-      <button class="slot" onclick="pickSlot(this,'11:00 AM')">11:00 AM</button>
-      <button class="slot" onclick="pickSlot(this,'2:00 PM')">2:00 PM</button>
-    </div>
-    <button class="btn" id="slotBtn" disabled onclick="redirectInstant()">
+    <button class="btn" id="slotBtn" disabled onclick="bookAppointment()">
       <div class="btn-spinner"></div>
-      <span class="btn-text">Book appointment →</span>
+      <span class="btn-text">Confirm booking →</span>
     </button>
-    <div class="redirect-loading" id="loadInstant">
-      <div class="spinner"></div>
-      <p>Opening your booking page...</p>
-    </div>
   </div>
 
-  <!-- STEP 4B: Callback -->
-  <div class="screen" id="s3b">
-    <button class="back" onclick="go('s2')">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Back
-    </button>
-    <h1>We'll call you back</h1>
-    <p class="sub">Our advisor will reach you within 4 working hours.</p>
-    <div class="info-box">
-      <div class="info-title">What happens next</div>
-      <div class="info-body">
-        Our team will call you on <strong>+91 <span id="cbMob"></span></strong>.
-        They'll understand your goals and schedule a detailed session at a time that suits you.
-      </div>
+  <!-- STEP 6: Confirmation -->
+  <div class="screen" id="s5">
+    <div class="success-icon">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M9 16l5 5 10-10" stroke="#1D9E75" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
-    <button class="btn" onclick="redirectCallback()">
-      <div class="btn-spinner"></div>
-      <span class="btn-text">Request callback →</span>
-    </button>
-    <div class="redirect-loading" id="loadCallback">
-      <div class="spinner"></div>
-      <p>Opening your booking page...</p>
+    <div class="success-text">
+      <h1>You're booked</h1>
+      <p class="sub">Confirmation sent to your email and WhatsApp.</p>
     </div>
+    <div class="conf-card">
+      <div class="conf-row"><span class="conf-key">Name</span><span class="conf-val" id="cName"></span></div>
+      <div class="conf-row"><span class="conf-key">Mobile</span><span class="conf-val" id="cMobile"></span></div>
+      <div class="conf-row"><span class="conf-key">Service</span><span class="conf-val" id="cService"></span></div>
+      <div class="conf-row"><span class="conf-key">Date &amp; time</span><span class="conf-val" id="cWhen"></span></div>
+      <div class="conf-row"><span class="conf-key">Corpus</span><span class="conf-val" id="cCorpus"></span></div>
+    </div>
+    <div class="restart" onclick="location.reload()">Book another appointment</div>
   </div>
 
 </div>
 
 <script>
-/* ── CONFIG: Zoho Bookings URLs ── */
-var ZOHO_INSTANT_URL  = 'https://enrichwise.zohobookings.in/#/279048000000841122'; // TEST Private consultation (1Cr+)
-var ZOHO_CALLBACK_URL = 'https://enrichwise.zohobookings.in/#/279048000000841186'; // TEST Low AUM Private consultation (under 1Cr)
-/* API_BASE empty = call /api/* on the same origin (Vercel serves HTML + API together) */
+/* API_BASE empty = same-origin Vercel deployment */
 var API_BASE = '';
-/* ────────────────────────────────────────────────────────── */
 
-var state = { mob: '', corpus: '', corpusLabel: '', track: '', slot: '' };
+var state = {
+  mob: '', corpus: '', corpusLabel: '', track: '',
+  name: '', email: '',
+  slotDate: '', slotDateIso: '', slotTime: ''
+};
 var timerInterval = null;
 
 function go(id) {
@@ -413,7 +432,6 @@ async function sendOtp() {
     if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
     state.mob = mob;
     document.getElementById('mobDisplay').textContent = mob;
-    document.getElementById('cbMob').textContent = mob;
     go('s1');
     startTimer(30);
     setTimeout(function() { document.getElementById('o0').focus(); }, 100);
@@ -528,37 +546,130 @@ function pickCorpus(el, corpus, track, label) {
 }
 
 function goBooking() {
-  if (state.track === 'instant') { go('s3a'); }
-  else { go('s3b'); }
+  go('s3');
+  setTimeout(function() { document.getElementById('fName').focus(); }, 100);
 }
 
-/* ── Step 4A: Instant ── */
-function pickSlot(el, slot) {
+/* ── Step 4: Name + Email ── */
+function onDetailsInput() {
+  var name = document.getElementById('fName').value.trim();
+  var email = document.getElementById('fEmail').value.trim();
+  var valid = name.length >= 2 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+  document.getElementById('detailsBtn').disabled = !valid;
+  document.getElementById('detailsError').classList.remove('show');
+}
+
+async function submitDetails() {
+  var name = document.getElementById('fName').value.trim();
+  var email = document.getElementById('fEmail').value.trim();
+  if (name.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    document.getElementById('detailsError').classList.add('show');
+    return;
+  }
+  state.name = name; state.email = email;
+  go('s4');
+  loadSlots();
+}
+
+/* ── Step 5: Real slot picker ── */
+async function loadSlots() {
+  var container = document.getElementById('slotsContainer');
+  container.innerHTML = '<div class="redirect-loading show"><div class="spinner"></div><p>Loading available slots...</p></div>';
+  document.getElementById('slotsError').classList.remove('show');
+  document.getElementById('slotBtn').disabled = true;
+  state.slotDate = ''; state.slotDateIso = ''; state.slotTime = '';
+  try {
+    var res = await fetch(API_BASE + '/api/zoho/slots?track=' + encodeURIComponent(state.track) + '&days=7');
+    var data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load slots');
+    renderSlots(data.results || []);
+  } catch (err) {
+    container.innerHTML = '';
+    document.getElementById('slotsErrorText').textContent = err.message || 'Could not load slots. Please try again.';
+    document.getElementById('slotsError').classList.add('show');
+  }
+}
+
+function renderSlots(days) {
+  var container = document.getElementById('slotsContainer');
+  if (!days || days.length === 0) {
+    container.innerHTML = '<div class="no-slots">No slots available in the next 7 days. Please contact us directly.</div>';
+    return;
+  }
+  var today = new Date(); today.setHours(0,0,0,0);
+  var tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  var html = '';
+  days.forEach(function(day) {
+    var label = day.date;
+    if (day.iso) {
+      var d = new Date(day.iso + 'T00:00:00');
+      if (d.getTime() === today.getTime()) label = 'Today';
+      else if (d.getTime() === tomorrow.getTime()) label = 'Tomorrow';
+      else label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+    // Slots might be an array of strings or objects — normalize
+    var slots = (day.slots || []).map(function(s) {
+      if (typeof s === 'string') return s;
+      return s.time || s.from_time || s.slot || String(s);
+    }).filter(Boolean);
+    if (slots.length === 0) return;
+    html += '<div class="day-label">' + escapeHtml(label) + '</div><div class="slot-grid">';
+    slots.forEach(function(time) {
+      html += '<button class="slot" data-date="' + escapeHtml(day.date) + '" data-iso="' + escapeHtml(day.iso || '') + '" data-time="' + escapeHtml(time) + '" onclick="pickSlot(this)">' + escapeHtml(time) + '</button>';
+    });
+    html += '</div>';
+  });
+  container.innerHTML = html || '<div class="no-slots">No slots available in the next 7 days.</div>';
+}
+
+function pickSlot(el) {
   document.querySelectorAll('.slot').forEach(function(s) { s.classList.remove('sel'); });
   el.classList.add('sel');
-  state.slot = slot;
+  state.slotDate    = el.getAttribute('data-date');
+  state.slotDateIso = el.getAttribute('data-iso');
+  state.slotTime    = el.getAttribute('data-time');
   document.getElementById('slotBtn').disabled = false;
 }
 
-function redirectInstant() {
-  document.getElementById('slotBtn').style.display = 'none';
-  document.getElementById('loadInstant').classList.add('show');
-  var url = ZOHO_INSTANT_URL
-    + '?mobile=' + encodeURIComponent('+91' + state.mob)
-    + '&corpus=' + encodeURIComponent(state.corpusLabel)
-    + '&slot='   + encodeURIComponent(state.slot);
-  setTimeout(function() { window.location.href = url; }, 1200);
+async function bookAppointment() {
+  setLoading('slotBtn', true);
+  try {
+    var res = await fetch(API_BASE + '/api/zoho/book', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        track:  state.track,
+        date:   state.slotDate,
+        slot:   state.slotTime,
+        name:   state.name,
+        email:  state.email,
+        mobile: state.mob,
+        corpus: state.corpusLabel
+      })
+    });
+    var data = await res.json();
+    if (!res.ok || !data.ok) {
+      var msg = (data && (data.error || (data.details && (data.details.message || JSON.stringify(data.details))))) || 'Booking failed. Please try again.';
+      throw new Error(msg);
+    }
+    // Populate confirmation
+    document.getElementById('cName').textContent    = state.name;
+    document.getElementById('cMobile').textContent  = '+91 ' + state.mob;
+    document.getElementById('cService').textContent = state.track === 'instant' ? 'Priority Wealth Session' : 'Discovery Call';
+    document.getElementById('cWhen').textContent    = state.slotDate + ' · ' + state.slotTime;
+    document.getElementById('cCorpus').textContent  = state.corpusLabel;
+    go('s5');
+  } catch (err) {
+    document.getElementById('slotsErrorText').textContent = err.message;
+    document.getElementById('slotsError').classList.add('show');
+  }
+  setLoading('slotBtn', false);
 }
 
-/* ── Step 4B: Callback ── */
-function redirectCallback() {
-  var btn = document.querySelector('#s3b .btn');
-  btn.style.display = 'none';
-  document.getElementById('loadCallback').classList.add('show');
-  var url = ZOHO_CALLBACK_URL
-    + '?mobile=' + encodeURIComponent('+91' + state.mob)
-    + '&corpus=' + encodeURIComponent(state.corpusLabel);
-  setTimeout(function() { window.location.href = url; }, 1200);
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+  });
 }
 
 /* ── Helpers ── */
