@@ -1,20 +1,23 @@
 /**
- * Shared Redis client for the booking app.
- * Reads KV_REDIS_URL injected by Vercel's Redis (Upstash) integration.
- * Cached across invocations on a warm Lambda.
+ * Shared Upstash Redis client (HTTP REST, serverless-friendly).
+ * Reads env vars injected by Vercel's Upstash marketplace integration:
+ *   UPSTASH_REDIS_KV_REST_API_URL
+ *   UPSTASH_REDIS_KV_REST_API_TOKEN
  */
-import { createClient } from 'redis';
+import { Redis } from '@upstash/redis';
 
 let client = null;
 
-export async function getRedis() {
-  if (client && client.isOpen) return client;
+export function getRedis() {
+  if (client) return client;
 
-  const url = process.env.KV_REDIS_URL;
-  if (!url) throw new Error('KV_REDIS_URL env var is not set');
+  const url = process.env.UPSTASH_REDIS_KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_KV_REST_API_TOKEN;
 
-  client = createClient({ url });
-  client.on('error', (err) => console.error('Redis error:', err));
-  await client.connect();
+  if (!url || !token) {
+    throw new Error('Upstash REST env vars are not set');
+  }
+
+  client = new Redis({ url, token });
   return client;
 }

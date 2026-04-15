@@ -2,7 +2,7 @@
  * POST /api/send-otp
  * Body: { mobile: "9876543210" }
  *
- * Generates a 6-digit OTP, stores it in Redis with a 10-min TTL,
+ * Generates a 6-digit OTP, stores it in Upstash Redis with a 10-min TTL,
  * then sends it via WATI WhatsApp template message.
  */
 import { getRedis } from './_redis.js';
@@ -42,9 +42,9 @@ export default async function handler(req) {
 
   let redis;
   try {
-    redis = await getRedis();
+    redis = getRedis();
   } catch (err) {
-    console.error('Redis connect error:', err);
+    console.error('Redis init error:', err);
     return json(500, { error: 'Service unavailable. Please try again.' });
   }
 
@@ -63,7 +63,7 @@ export default async function handler(req) {
   await redis.del(`verify_attempts:${mobile}`);
 
   /* ── Store OTP with 10-minute TTL ── */
-  await redis.set(`otp:${mobile}`, otp, { EX: 600 });
+  await redis.set(`otp:${mobile}`, otp, { ex: 600 });
 
   /* ── Send via WATI ── */
   const watiBase = (process.env.WATI_API_URL || '').replace(/\/$/, '');

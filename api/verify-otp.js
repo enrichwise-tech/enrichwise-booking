@@ -2,7 +2,7 @@
  * POST /api/verify-otp
  * Body: { mobile: "9876543210", otp: "123456" }
  *
- * Checks the OTP stored in Redis. Deletes it on success (one-time use).
+ * Checks the OTP stored in Upstash Redis. Deletes it on success (one-time use).
  */
 import { getRedis } from './_redis.js';
 
@@ -40,9 +40,9 @@ export default async function handler(req) {
 
   let redis;
   try {
-    redis = await getRedis();
+    redis = getRedis();
   } catch (err) {
-    console.error('Redis connect error:', err);
+    console.error('Redis init error:', err);
     return json(500, { valid: false, error: 'Service unavailable. Please try again.' });
   }
 
