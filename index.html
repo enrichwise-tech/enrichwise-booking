@@ -455,7 +455,8 @@ var state = {
   topics: [],        // multi-select: Investments / Taxation / Insurance
   mode: '',          // single: Normal call / Whatsapp call / Google meet / Zoom call
   platform: '',      // free text
-  slotDate: '', slotDateIso: '', slotTime: ''
+  slotDate: '', slotDateIso: '', slotTime: '',
+  slotStaffIds: []   // list of staff IDs available for the picked slot
 };
 var timerInterval = null;
 
@@ -687,15 +688,20 @@ function renderSlots(days) {
       else if (d.getTime() === tomorrow.getTime()) label = 'Tomorrow';
       else label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
     }
-    // Slots might be an array of strings or objects — normalize
+    // New shape: slots is array of { time, staff_ids }
     var slots = (day.slots || []).map(function(s) {
-      if (typeof s === 'string') return s;
-      return s.time || s.from_time || s.slot || String(s);
-    }).filter(Boolean);
+      if (typeof s === 'string') return { time: s, staff_ids: [] };
+      return { time: s.time || s.from_time || s.slot || '', staff_ids: Array.isArray(s.staff_ids) ? s.staff_ids : [] };
+    }).filter(function(s) { return s.time; });
     if (slots.length === 0) return;
     html += '<div class="day-label">' + escapeHtml(label) + '</div><div class="slot-grid">';
-    slots.forEach(function(time) {
-      html += '<button class="slot" data-date="' + escapeHtml(day.date) + '" data-iso="' + escapeHtml(day.iso || '') + '" data-time="' + escapeHtml(time) + '" onclick="pickSlot(this)">' + escapeHtml(time) + '</button>';
+    slots.forEach(function(s) {
+      html += '<button class="slot"'
+        + ' data-date="' + escapeHtml(day.date) + '"'
+        + ' data-iso="' + escapeHtml(day.iso || '') + '"'
+        + ' data-time="' + escapeHtml(s.time) + '"'
+        + ' data-staff="' + escapeHtml(s.staff_ids.join(',')) + '"'
+        + ' onclick="pickSlot(this)">' + escapeHtml(s.time) + '</button>';
     });
     html += '</div>';
   });
@@ -705,9 +711,11 @@ function renderSlots(days) {
 function pickSlot(el) {
   document.querySelectorAll('.slot').forEach(function(s) { s.classList.remove('sel'); });
   el.classList.add('sel');
-  state.slotDate    = el.getAttribute('data-date');
-  state.slotDateIso = el.getAttribute('data-iso');
-  state.slotTime    = el.getAttribute('data-time');
+  state.slotDate     = el.getAttribute('data-date');
+  state.slotDateIso  = el.getAttribute('data-iso');
+  state.slotTime     = el.getAttribute('data-time');
+  var staffAttr      = el.getAttribute('data-staff') || '';
+  state.slotStaffIds = staffAttr ? staffAttr.split(',').filter(Boolean) : [];
   document.getElementById('slotBtn').disabled = false;
 }
 
@@ -718,16 +726,17 @@ async function bookAppointment() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        track:    state.track,
-        date:     state.slotDate,
-        slot:     state.slotTime,
-        name:     state.name,
-        email:    state.email,
-        mobile:   state.mob,
-        corpus:   state.corpusLabel,
-        topics:   state.topics,
-        mode:     state.mode,
-        platform: state.platform
+        track:     state.track,
+        date:      state.slotDate,
+        slot:      state.slotTime,
+        name:      state.name,
+        email:     state.email,
+        mobile:    state.mob,
+        corpus:    state.corpusLabel,
+        topics:    state.topics,
+        mode:      state.mode,
+        platform:  state.platform,
+        staff_ids: state.slotStaffIds
       })
     });
     var data = await res.json();
