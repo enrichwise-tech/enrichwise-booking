@@ -78,7 +78,8 @@ export default async function handler(req, res) {
   /* ── Send via WATI ── */
   const watiBase = (process.env.WATI_API_URL || '').replace(/\/$/, '');
   const templateName = process.env.WATI_TEMPLATE_NAME;
-  const watiToken = process.env.WATI_API_TOKEN;
+  // Strip any accidental "Bearer " prefix so we don't double it
+  const watiToken = (process.env.WATI_API_TOKEN || '').replace(/^Bearer\s+/i, '').trim();
 
   if (!watiBase || !templateName || !watiToken) {
     console.error('[send-otp] WATI env vars missing', {
