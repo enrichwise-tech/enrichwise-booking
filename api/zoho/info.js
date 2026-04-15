@@ -21,6 +21,15 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
+  // Access gate — must match the ZOHO_INFO_KEY env var. Without this, the
+  // endpoint would publicly expose your workspace + service layout.
+  // Return 404 rather than 401 to avoid revealing the endpoint exists.
+  const expected = (process.env.ZOHO_INFO_KEY || '').trim();
+  const provided = (req.query.key || '').trim();
+  if (!expected || provided !== expected) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
   try {
     // 1. Workspaces
     const wsRes = await zohoGet('/bookings/v1/json/workspaces');
