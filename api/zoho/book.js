@@ -19,8 +19,8 @@
 import { zohoPost } from './_client.js';
 import { sendAlert } from '../_alert.js';
 
-const DEFAULT_INSTANT_SVC  = '279048000000841122';
-const DEFAULT_CALLBACK_SVC = '279048000000841186';
+const DEFAULT_INSTANT_SVC  = '279048000000733018'; // Private consultation (Online)
+const DEFAULT_CALLBACK_SVC = '279048000000841186'; // unused
 const DEFAULT_STAFF_ID     = '279048000000288162';
 const TIME_ZONE            = 'Asia/Calcutta';
 

@@ -22,8 +22,8 @@
  */
 import { zohoGet } from './_client.js';
 
-const DEFAULT_INSTANT_SVC  = '279048000000841122';
-const DEFAULT_CALLBACK_SVC = '279048000000841186';
+const DEFAULT_INSTANT_SVC  = '279048000000733018'; // Private consultation (Online)
+const DEFAULT_CALLBACK_SVC = '279048000000841186'; // unused (under-1Cr routes to Zoho Form)
 
 // Assigned staff IDs observed via /api/zoho/info for both TEST services
 const STAFF_POOL = [
