@@ -237,6 +237,52 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 /* Empty slot-day state */
 .no-slots { text-align: center; padding: 1.5rem 0; font-size: 13px; color: var(--ink-3); }
 
+/* Calendar */
+.cal-wrap {
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); padding: 14px 12px 12px; margin-bottom: 16px;
+}
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.cal-nav {
+  width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--ink-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.cal-nav:hover { border-color: var(--brand); color: var(--brand); }
+.cal-nav:disabled { opacity: 0.35; cursor: not-allowed; }
+.cal-nav:disabled:hover { border-color: var(--border); color: var(--ink-2); }
+.cal-dow {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+  font-size: 11px; font-weight: 600; color: var(--ink-3);
+  text-align: center; margin-bottom: 6px;
+}
+.cal-dow span { padding: 4px 0; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-day {
+  aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--ink); border-radius: 8px;
+  border: 1px solid transparent; background: transparent;
+  cursor: pointer; transition: all 0.12s; font-family: inherit;
+}
+.cal-day:hover:not(:disabled):not(.sel) { background: var(--brand-light); border-color: var(--brand-light); }
+.cal-day.sel { background: var(--brand); color: #fff; font-weight: 600; }
+.cal-day:disabled { color: var(--ink-3); cursor: not-allowed; opacity: 0.4; }
+.cal-day.empty { visibility: hidden; cursor: default; }
+.cal-day.today { font-weight: 700; }
+.cal-day.today:not(.sel)::after {
+  content: ''; position: absolute; width: 4px; height: 4px; border-radius: 50%;
+  background: var(--brand); margin-top: 18px;
+}
+.cal-day { position: relative; }
+
+/* Slot list shown below calendar after a date is picked */
+.cal-slots { min-height: 40px; margin-bottom: 10px; }
+.cal-slots-label { font-size: 12px; font-weight: 600; color: var(--ink-3); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+.cal-slots-empty { font-size: 13px; color: var(--ink-3); text-align: center; padding: 14px 0; }
+.cal-slots-loading { text-align: center; padding: 16px 0; font-size: 13px; color: var(--ink-3); }
+
 /* Btn spinner */
 .btn-spinner {
   width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4);
@@ -400,20 +446,35 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     </button>
   </div>
 
-  <!-- STEP 5: Real slot picker -->
+  <!-- STEP 5: Calendar + slot picker -->
   <div class="screen" id="s4">
     <button class="back" onclick="go('s3')">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Back
     </button>
     <h1>Pick a slot</h1>
-    <p class="sub">Real-time availability — booking happens on confirmation.</p>
-    <div id="slotsContainer">
-      <div class="redirect-loading show" id="slotsLoading">
-        <div class="spinner"></div>
-        <p>Loading available slots...</p>
+    <p class="sub">Real-time availability.</p>
+
+    <div class="cal-wrap">
+      <div class="cal-head">
+        <button class="cal-nav" id="calPrev" onclick="changeMonth(-1)" aria-label="Previous month">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="cal-title" id="calTitle"></div>
+        <button class="cal-nav" id="calNext" onclick="changeMonth(1)" aria-label="Next month">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 12l4-4-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
+      <div class="cal-dow">
+        <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
     </div>
+
+    <div class="cal-slots" id="calSlots">
+      <div class="cal-slots-empty">Select a date to see available times.</div>
+    </div>
+
     <div class="error-msg" id="slotsError">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
       <span id="slotsErrorText">Could not load slots. Please try again.</span>
@@ -652,64 +713,129 @@ async function submitDetails() {
   loadSlots();
 }
 
-/* ── Step 5: Real slot picker ── */
-async function loadSlots() {
-  var container = document.getElementById('slotsContainer');
-  container.innerHTML = '<div class="redirect-loading show"><div class="spinner"></div><p>Loading available slots...</p></div>';
-  document.getElementById('slotsError').classList.remove('show');
+/* ── Step 5: Calendar + slot picker ── */
+var calView = null; // { year, month }  (month 0-indexed)
+var calMonthsAhead = 2; // how far forward user can navigate from current month
+
+function loadSlots() {
+  state.slotDate = ''; state.slotDateIso = ''; state.slotTime = ''; state.slotStaffIds = [];
   document.getElementById('slotBtn').disabled = true;
-  state.slotDate = ''; state.slotDateIso = ''; state.slotTime = '';
+  document.getElementById('slotsError').classList.remove('show');
+  document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">Select a date to see available times.</div>';
+  var now = new Date();
+  calView = { year: now.getFullYear(), month: now.getMonth() };
+  renderCalendar();
+}
+
+function renderCalendar() {
+  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var title = document.getElementById('calTitle');
+  var grid = document.getElementById('calGrid');
+  var prevBtn = document.getElementById('calPrev');
+  var nextBtn = document.getElementById('calNext');
+
+  title.textContent = months[calView.month] + ' ' + calView.year;
+
+  var now = new Date(); now.setHours(0,0,0,0);
+  var viewStart = new Date(calView.year, calView.month, 1);
+  var nowMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  var maxMonth = new Date(now.getFullYear(), now.getMonth() + calMonthsAhead, 1);
+
+  prevBtn.disabled = viewStart.getTime() <= nowMonth.getTime();
+  nextBtn.disabled = viewStart.getTime() >= maxMonth.getTime();
+
+  // ISO day of week where Monday=0..Sunday=6
+  var firstDay = new Date(calView.year, calView.month, 1);
+  var firstDow = (firstDay.getDay() + 6) % 7;
+  var daysInMonth = new Date(calView.year, calView.month + 1, 0).getDate();
+
+  var html = '';
+  for (var i = 0; i < firstDow; i++) html += '<div class="cal-day empty"></div>';
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dt = new Date(calView.year, calView.month, d);
+    dt.setHours(0,0,0,0);
+    var iso = calView.year + '-' + pad2(calView.month + 1) + '-' + pad2(d);
+    var past = dt.getTime() < now.getTime();
+    var isToday = dt.getTime() === now.getTime();
+    var selected = state.slotDateIso === iso;
+    var cls = 'cal-day';
+    if (isToday) cls += ' today';
+    if (selected) cls += ' sel';
+    html += '<button class="' + cls + '"'
+      + (past ? ' disabled' : '')
+      + ' data-iso="' + iso + '"'
+      + ' onclick="selectDate(\'' + iso + '\')">' + d + '</button>';
+  }
+  grid.innerHTML = html;
+}
+
+function changeMonth(delta) {
+  var now = new Date();
+  var nowMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  var maxMonth = new Date(now.getFullYear(), now.getMonth() + calMonthsAhead, 1);
+  var next = new Date(calView.year, calView.month + delta, 1);
+  if (next.getTime() < nowMonth.getTime() || next.getTime() > maxMonth.getTime()) return;
+  calView = { year: next.getFullYear(), month: next.getMonth() };
+  renderCalendar();
+}
+
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+async function selectDate(iso) {
+  state.slotDateIso = iso;
+  state.slotDate = '';
+  state.slotTime = '';
+  state.slotStaffIds = [];
+  document.getElementById('slotBtn').disabled = true;
+  document.getElementById('slotsError').classList.remove('show');
+  renderCalendar(); // re-renders with .sel class on picked day
+
+  var panel = document.getElementById('calSlots');
+  panel.innerHTML = '<div class="cal-slots-loading">Loading available times...</div>';
+
   try {
-    var res = await fetch(API_BASE + '/api/zoho/slots?track=' + encodeURIComponent(state.track) + '&days=7');
+    var url = API_BASE + '/api/zoho/slots?track=' + encodeURIComponent(state.track) + '&date=' + encodeURIComponent(iso);
+    var res = await fetch(url);
     var data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load slots');
-    renderSlots(data.results || []);
+    renderDaySlots(data.date, data.slots || []);
   } catch (err) {
-    container.innerHTML = '';
+    panel.innerHTML = '';
     document.getElementById('slotsErrorText').textContent = err.message || 'Could not load slots. Please try again.';
     document.getElementById('slotsError').classList.add('show');
   }
 }
 
-function renderSlots(days) {
-  var container = document.getElementById('slotsContainer');
-  if (!days || days.length === 0) {
-    container.innerHTML = '<div class="no-slots">No slots available in the next 7 days. Please contact us directly.</div>';
+function renderDaySlots(zohoDate, slots) {
+  var panel = document.getElementById('calSlots');
+  var niceDate = '';
+  if (state.slotDateIso) {
+    var d = new Date(state.slotDateIso + 'T00:00:00');
+    niceDate = d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
+  }
+  if (!slots.length) {
+    panel.innerHTML = '<div class="cal-slots-label">' + escapeHtml(niceDate) + '</div><div class="cal-slots-empty">No available times on this day — try another date.</div>';
     return;
   }
-  var today = new Date(); today.setHours(0,0,0,0);
-  var tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-  var html = '';
-  days.forEach(function(day) {
-    var label = day.date;
-    if (day.iso) {
-      var d = new Date(day.iso + 'T00:00:00');
-      if (d.getTime() === today.getTime()) label = 'Today';
-      else if (d.getTime() === tomorrow.getTime()) label = 'Tomorrow';
-      else label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-    }
-    // New shape: slots is array of { time, staff_ids }
-    var slots = (day.slots || []).map(function(s) {
-      if (typeof s === 'string') return { time: s, staff_ids: [] };
-      return { time: s.time || s.from_time || s.slot || '', staff_ids: Array.isArray(s.staff_ids) ? s.staff_ids : [] };
-    }).filter(function(s) { return s.time; });
-    if (slots.length === 0) return;
-    html += '<div class="day-label">' + escapeHtml(label) + '</div><div class="slot-grid">';
-    slots.forEach(function(s) {
-      html += '<button class="slot"'
-        + ' data-date="' + escapeHtml(day.date) + '"'
-        + ' data-iso="' + escapeHtml(day.iso || '') + '"'
-        + ' data-time="' + escapeHtml(s.time) + '"'
-        + ' data-staff="' + escapeHtml(s.staff_ids.join(',')) + '"'
-        + ' onclick="pickSlot(this)">' + escapeHtml(s.time) + '</button>';
-    });
-    html += '</div>';
+  var normalized = slots.map(function(s) {
+    if (typeof s === 'string') return { time: s, staff_ids: [] };
+    return { time: s.time || s.from_time || s.slot || '', staff_ids: Array.isArray(s.staff_ids) ? s.staff_ids : [] };
+  }).filter(function(s) { return s.time; });
+  var html = '<div class="cal-slots-label">' + escapeHtml(niceDate) + '</div><div class="slot-grid">';
+  normalized.forEach(function(s) {
+    html += '<button class="slot"'
+      + ' data-date="' + escapeHtml(zohoDate || '') + '"'
+      + ' data-iso="' + escapeHtml(state.slotDateIso) + '"'
+      + ' data-time="' + escapeHtml(s.time) + '"'
+      + ' data-staff="' + escapeHtml(s.staff_ids.join(',')) + '"'
+      + ' onclick="pickSlot(this)">' + escapeHtml(s.time) + '</button>';
   });
-  container.innerHTML = html || '<div class="no-slots">No slots available in the next 7 days.</div>';
+  html += '</div>';
+  panel.innerHTML = html;
 }
 
 function pickSlot(el) {
-  document.querySelectorAll('.slot').forEach(function(s) { s.classList.remove('sel'); });
+  document.querySelectorAll('#calSlots .slot').forEach(function(s) { s.classList.remove('sel'); });
   el.classList.add('sel');
   state.slotDate     = el.getAttribute('data-date');
   state.slotDateIso  = el.getAttribute('data-iso');
