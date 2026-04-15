@@ -48,13 +48,101 @@ body {
   background: var(--bg);
   color: var(--ink);
   min-height: 100vh;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 2rem 1rem 4rem;
 }
-.shell { width: 100%; max-width: 420px; }
-.brand { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 2.5rem; letter-spacing: -0.2px; }
+
+/* Split layout: testimonial pane left, form pane right (desktop only) */
+.page {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
+}
+.side-panel {
+  flex: 0 0 360px;
+  background: linear-gradient(180deg, #0F6E56 0%, #085041 100%);
+  color: #fff;
+  padding: 40px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.side-brand { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; }
+.side-tagline { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 4px; }
+.side-quote { margin-top: auto; margin-bottom: auto; }
+.side-quote-mark {
+  font-size: 48px; font-weight: 700; line-height: 1;
+  color: rgba(255,255,255,0.25); margin-bottom: -8px;
+}
+.side-quote-text {
+  font-size: 18px; line-height: 1.5; font-weight: 500;
+  color: #fff; margin-bottom: 18px;
+  letter-spacing: -0.2px;
+}
+.side-quote-author {
+  display: flex; align-items: center; gap: 12px;
+}
+.side-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 600; color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+.side-author-name { font-size: 14px; font-weight: 600; color: #fff; }
+.side-author-role { font-size: 12px; color: rgba(255,255,255,0.7); }
+.side-footer {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: rgba(255,255,255,0.55);
+}
+.side-footer svg { opacity: 0.7; }
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Top bar: step indicator left, help button right */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+}
+.step-indicator {
+  display: flex; align-items: center; gap: 14px;
+  font-size: 13px; color: var(--ink-2); font-weight: 500;
+}
+.step-indicator .step-count { color: var(--ink); font-weight: 600; }
+.step-dots { display: flex; gap: 4px; }
+.step-dot {
+  width: 24px; height: 3px; border-radius: 2px;
+  background: var(--border); transition: background 0.25s;
+}
+.step-dot.active { background: var(--brand); }
+.help-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border: 1px solid var(--border); border-radius: 100px;
+  background: var(--surface); color: var(--ink);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  text-decoration: none; font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+.help-btn:hover { border-color: var(--brand); background: var(--brand-light); }
+.help-btn svg { color: #25D366; flex-shrink: 0; }
+
+.shell {
+  width: 100%;
+  max-width: 460px;
+  padding: 40px 32px 60px;
+  margin: 0 auto;
+}
+.brand { display: none; }  /* replaced by top bar brand on mobile */
+
+@media (max-width: 860px) {
+  .side-panel { display: none; }
+  .topbar { padding: 16px 20px; }
+  .shell { padding: 24px 20px 48px; max-width: 100%; }
+}
 .screen { display: none; }
 .screen.active { display: block; animation: fadeUp 0.2s ease; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -308,12 +396,49 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .btn.loading .btn-spinner { display: block; }
 .btn.loading .btn-text { opacity: 0.7; }
 
-@media (max-width: 480px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 22px; } }
+@media (max-width: 480px) { h1 { font-size: 22px; } }
 </style>
 </head>
 <body>
-<div class="shell">
-  <div class="brand">Enrichwise</div>
+<div class="page">
+
+  <!-- Left: testimonial panel (desktop only) -->
+  <aside class="side-panel">
+    <div>
+      <div class="side-brand">Enrichwise</div>
+      <div class="side-tagline">Financial Services</div>
+    </div>
+    <div class="side-quote">
+      <div class="side-quote-mark">"</div>
+      <div class="side-quote-text">Until this call, I didn't know that the majority of my funds were under-performing the benchmark.</div>
+      <div class="side-quote-author">
+        <div class="side-avatar">RB</div>
+        <div>
+          <div class="side-author-name">Rajesh B.</div>
+          <div class="side-author-role">Enrichwise client since 2023</div>
+        </div>
+      </div>
+    </div>
+    <div class="side-footer">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1L2 3.5v4c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5v-4L8 1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      Your data is 100% protected
+    </div>
+  </aside>
+
+  <!-- Right: top bar + form -->
+  <main class="main">
+    <div class="topbar">
+      <div class="step-indicator" id="stepIndicator">
+        <span class="step-count"><span id="stepCur">1</span> of <span id="stepTotal">4</span></span>
+        <span class="step-dots" id="stepDots"></span>
+      </div>
+      <a class="help-btn" id="helpBtn" href="https://wa.me/919082469064?text=Hi%2C%20I%20need%20help%20booking%20an%20appointment" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M13.6 2.3A7.9 7.9 0 008 0 8 8 0 001 11.9L0 16l4.2-1.1A8 8 0 008 16a8 8 0 005.6-13.7zM8 14.7a6.7 6.7 0 01-3.4-.9l-.2-.1-2.5.6.7-2.4-.2-.3A6.7 6.7 0 1114.7 8 6.7 6.7 0 018 14.7zm3.7-5A2.2 2.2 0 0011 9.3c-.2-.1-.9-.4-1-.5s-.2 0-.3.1-.4.5-.5.6-.2.2-.4.1a5.5 5.5 0 01-2.7-2.4c-.2-.4.2-.3.5-1 .1-.1 0-.2 0-.3l-.5-1.2c-.1-.3-.2-.2-.3-.2H5.5a.6.6 0 00-.5.3 1.9 1.9 0 00-.6 1.5 3.4 3.4 0 00.7 1.8 7.6 7.6 0 002.9 2.6c.4.2.7.3 1 .4a2.4 2.4 0 001 .1c.4 0 .9-.3 1-.7a1.3 1.3 0 00.1-.8 1 1 0 00-.4-.3z"/></svg>
+        Help
+      </a>
+    </div>
+    <div class="shell">
+      <div class="brand">Enrichwise</div>
 
   <!-- STEP 1: Mobile -->
   <div class="screen active" id="s0">
@@ -389,7 +514,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       Back
     </button>
     <h1>What's your existing corpus?</h1>
-    <p class="sub">Helps us match you with the right advisor.</p>
+    <p class="sub">Helps us match you with the right expert.</p>
     <div class="corpus-list">
       <div class="corpus-card" onclick="pickCorpus(this,'under1cr','gbp','Under ₹1 Cr')">
         <div class="corpus-amount">Under ₹1 Cr</div>
@@ -422,7 +547,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       Back
     </button>
     <h1>A few quick details</h1>
-    <p class="sub">So your advisor can prepare for the session.</p>
+    <p class="sub">So your consultant can prepare for the session.</p>
 
     <label class="field-label">Full name</label>
     <input class="field" id="fName" type="text" placeholder="Your full name" oninput="onDetailsInput()" autocomplete="name">
@@ -497,7 +622,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
   </div>
 
   <!-- STEP 6: Confirmation -->
-  <div class="screen" id="s5">
+  <div class="screen" id="s5" data-hide-step="1">
     <div class="success-icon">
       <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M9 16l5 5 10-10" stroke="#1D9E75" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
@@ -514,7 +639,9 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     </div>
   </div>
 
-</div>
+    </div> <!-- /.shell -->
+  </main>
+</div> <!-- /.page -->
 
 <script>
 /* API_BASE empty = same-origin Vercel deployment */
@@ -538,10 +665,57 @@ var state = {
 };
 var timerInterval = null;
 
+// s0/s1 = step 1 (mobile + OTP), s2 = step 2 (corpus), s3 = step 3 (details), s4 = step 4 (slot)
+var STEP_MAP = { s0: 1, s1: 1, s2: 2, s3: 3, s4: 4 };
+var TOTAL_STEPS = 4;
+
 function go(id) {
   document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
-  document.getElementById(id).classList.add('active');
+  var el = document.getElementById(id);
+  el.classList.add('active');
+  updateStepIndicator(id);
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateStepIndicator(screenId) {
+  var topbar = document.querySelector('.topbar');
+  var indicator = document.getElementById('stepIndicator');
+  var hide = document.getElementById(screenId) && document.getElementById(screenId).getAttribute('data-hide-step') === '1';
+  if (hide) {
+    indicator.style.visibility = 'hidden';
+    return;
+  }
+  indicator.style.visibility = 'visible';
+  var step = STEP_MAP[screenId] || 1;
+  document.getElementById('stepCur').textContent = step;
+  document.getElementById('stepTotal').textContent = TOTAL_STEPS;
+  var dots = '';
+  for (var i = 1; i <= TOTAL_STEPS; i++) {
+    dots += '<span class="step-dot' + (i <= step ? ' active' : '') + '"></span>';
+  }
+  document.getElementById('stepDots').innerHTML = dots;
+}
+
+// Initial render of step indicator on page load
+document.addEventListener('DOMContentLoaded', function() { updateStepIndicator('s0'); });
+
+// Fire-and-forget event logging for funnel tracking
+function trackEvent(type, extra) {
+  try {
+    var payload = Object.assign({
+      type: type,
+      mobile: state.mob || '',
+      country_code: state.cc || '',
+      track: state.track || '',
+      ts: Date.now()
+    }, extra || {});
+    fetch(API_BASE + '/api/track-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true
+    }).catch(function(){});
+  } catch(e) {}
 }
 
 /* ── Step 1: Mobile ── */
@@ -582,6 +756,7 @@ async function sendOtp() {
     state.mob = mob;
     state.cc = cc;
     document.getElementById('mobDisplay').textContent = '+' + cc + ' ' + mob;
+    trackEvent('otp_sent');
     go('s1');
     startTimer(30);
     setTimeout(function() { document.getElementById('o0').focus(); }, 100);
@@ -641,6 +816,7 @@ async function verifyOtp() {
     var data = await res.json();
     if (!res.ok || !data.valid) throw new Error('invalid');
     clearInterval(timerInterval);
+    trackEvent('otp_verified');
     go('s2');
   } catch (err) {
     getBoxes().forEach(function(b) { b.classList.add('err'); b.value = ''; });
@@ -696,9 +872,11 @@ function pickCorpus(el, corpus, track, label) {
 }
 
 function goBooking() {
+  trackEvent('corpus_selected', { corpus: state.corpusLabel });
   if (state.track === 'gbp') {
     // Under ₹1 Cr — redirect to the goal-based plan Zoho form instead of the
     // call-booking flow. Pass mobile as a URL param in case the form pre-fills.
+    trackEvent('gbp_redirected');
     var url = GBP_FORM_URL + '?mobile=' + encodeURIComponent('+' + state.cc + state.mob);
     window.location.href = url;
     return;
@@ -746,6 +924,7 @@ async function submitDetails() {
   state.topics = d.topics;
   state.mode = d.mode;
   state.platform = d.platform;
+  trackEvent('details_submitted', { topics: d.topics.join(','), mode: d.mode });
   go('s4');
   loadSlots();
 }
@@ -879,6 +1058,7 @@ function pickSlot(el) {
   state.slotTime     = el.getAttribute('data-time');
   var staffAttr      = el.getAttribute('data-staff') || '';
   state.slotStaffIds = staffAttr ? staffAttr.split(',').filter(Boolean) : [];
+  trackEvent('slot_picked', { date: state.slotDate, slot: state.slotTime });
   document.getElementById('slotBtn').disabled = false;
 }
 
@@ -914,6 +1094,7 @@ async function bookAppointment() {
     document.getElementById('cService').textContent = SERVICE_NAME;
     document.getElementById('cWhen').textContent    = state.slotDate + ' · ' + state.slotTime;
     document.getElementById('cMode').textContent    = state.mode || '—';
+    trackEvent('booking_created', { date: state.slotDate, slot: state.slotTime, booking_id: (data && data.booking_id) || null });
     go('s5');
   } catch (err) {
     document.getElementById('slotsErrorText').textContent = err.message;
