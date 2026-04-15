@@ -7,18 +7,12 @@
  */
 import { getRedis } from './_redis.js';
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json'
-};
-
-function json(status, body) {
-  return new Response(JSON.stringify(body), { status, headers: CORS });
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-// fetch() with an abort-based timeout so a slow upstream can't hang the function
 async function fetchWithTimeout(url, opts = {}, ms = 10000) {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
@@ -29,28 +23,20 @@ async function fetchWithTimeout(url, opts = {}, ms = 10000) {
   }
 }
 
-export default async function handler(req) {
+export default async function handler(req, res) {
+  setCors(res);
   console.log('[send-otp] invoked, method=', req.method);
 
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS });
-  }
-  if (req.method !== 'POST') {
-    return json(405, { error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return json(400, { error: 'Invalid JSON' });
-  }
-
+  // Vercel Node runtime auto-parses JSON bodies when Content-Type is application/json
+  const body = req.body || {};
   const { mobile } = body;
-  console.log('[send-otp] parsed body, mobile ends with:', mobile ? mobile.slice(-4) : '(none)');
+  console.log('[send-otp] parsed body, mobile ends with:', mobile ? String(mobile).slice(-4) : '(none)');
 
   if (!mobile || !/^\d{10}$/.test(mobile)) {
-    return json(400, { error: 'Please enter a valid 10-digit mobile number' });
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
   }
 
   let redis;
@@ -59,24 +45,23 @@ export default async function handler(req) {
     console.log('[send-otp] redis client ready');
   } catch (err) {
     console.error('[send-otp] redis init error:', err.message);
-    return json(500, { error: 'Service unavailable (init). Please try again.' });
+    return res.status(500).json({ error: 'Service unavailable (init). Please try again.' });
   }
 
-  /* ── Rate limit + redis writes ── */
+  /* ── Rate limit ── */
   let attempts;
   try {
     const rateLimitKey = `ratelimit:${mobile}`;
-    console.log('[send-otp] calling redis.incr');
     attempts = await redis.incr(rateLimitKey);
     console.log('[send-otp] incr ok, attempts=', attempts);
     if (attempts === 1) await redis.expire(rateLimitKey, 600);
   } catch (err) {
     console.error('[send-otp] redis op error:', err.message);
-    return json(500, { error: 'Service unavailable (redis). Please try again.' });
+    return res.status(500).json({ error: 'Service unavailable (redis). Please try again.' });
   }
 
   if (attempts > 3) {
-    return json(429, { error: 'Too many attempts. Please try again after 10 minutes.' });
+    return res.status(429).json({ error: 'Too many attempts. Please try again after 10 minutes.' });
   }
 
   const otp = String(Math.floor(100000 + Math.random() * 900000));
@@ -87,7 +72,7 @@ export default async function handler(req) {
     console.log('[send-otp] otp stored in redis');
   } catch (err) {
     console.error('[send-otp] redis store error:', err.message);
-    return json(500, { error: 'Service unavailable (store). Please try again.' });
+    return res.status(500).json({ error: 'Service unavailable (store). Please try again.' });
   }
 
   /* ── Send via WATI ── */
@@ -99,7 +84,7 @@ export default async function handler(req) {
     console.error('[send-otp] WATI env vars missing', {
       hasUrl: !!watiBase, hasTemplate: !!templateName, hasToken: !!watiToken
     });
-    return json(500, { error: 'WATI not configured' });
+    return res.status(500).json({ error: 'WATI not configured' });
   }
 
   const watiEndpoint = `${watiBase}/api/v1/sendTemplateMessage?whatsappNumber=91${mobile}`;
@@ -125,17 +110,17 @@ export default async function handler(req) {
     }, 10000);
 
     const respText = await watiRes.text();
-    console.log('[send-otp] WATI response status=', watiRes.status, 'body=', respText.slice(0, 300));
+    console.log('[send-otp] WATI status=', watiRes.status, 'body=', respText.slice(0, 300));
 
     if (!watiRes.ok) {
-      return json(502, { error: 'Could not send OTP (WATI ' + watiRes.status + '). Please try again.' });
+      return res.status(502).json({ error: 'Could not send OTP (WATI ' + watiRes.status + '). Please try again.' });
     }
   } catch (err) {
     console.error('[send-otp] WATI fetch error:', err.name, err.message);
     const msg = err.name === 'AbortError' ? 'WATI timed out' : 'WATI unreachable';
-    return json(502, { error: msg });
+    return res.status(502).json({ error: msg });
   }
 
   console.log('[send-otp] success');
-  return json(200, { success: true, message: 'OTP sent via WhatsApp' });
+  return res.status(200).json({ success: true, message: 'OTP sent via WhatsApp' });
 }

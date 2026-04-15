@@ -6,68 +6,73 @@
  */
 import { getRedis } from './_redis.js';
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json'
-};
-
-function json(status, body) {
-  return new Response(JSON.stringify(body), { status, headers: CORS });
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-export default async function handler(req) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS });
-  }
-  if (req.method !== 'POST') {
-    return json(405, { error: 'Method not allowed' });
-  }
+export default async function handler(req, res) {
+  setCors(res);
 
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return json(400, { error: 'Invalid JSON' });
-  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  const body = req.body || {};
   const { mobile, otp } = body;
 
-  if (!mobile || !otp || !/^\d{10}$/.test(mobile) || !/^\d{6}$/.test(otp)) {
-    return json(400, { valid: false, error: 'Missing or invalid mobile/otp' });
+  if (!mobile || !otp || !/^\d{10}$/.test(mobile) || !/^\d{6}$/.test(String(otp))) {
+    return res.status(400).json({ valid: false, error: 'Missing or invalid mobile/otp' });
   }
 
   let redis;
   try {
     redis = getRedis();
   } catch (err) {
-    console.error('Redis init error:', err);
-    return json(500, { valid: false, error: 'Service unavailable. Please try again.' });
+    console.error('[verify-otp] redis init error:', err.message);
+    return res.status(500).json({ valid: false, error: 'Service unavailable. Please try again.' });
   }
 
   /* ── Track wrong attempts to prevent brute force ── */
-  const attemptsKey = `verify_attempts:${mobile}`;
-  const attempts = await redis.incr(attemptsKey);
-  if (attempts === 1) await redis.expire(attemptsKey, 600);
+  let attempts;
+  try {
+    const attemptsKey = `verify_attempts:${mobile}`;
+    attempts = await redis.incr(attemptsKey);
+    if (attempts === 1) await redis.expire(attemptsKey, 600);
+  } catch (err) {
+    console.error('[verify-otp] redis op error:', err.message);
+    return res.status(500).json({ valid: false, error: 'Service unavailable. Please try again.' });
+  }
+
   if (attempts > 5) {
-    return json(429, { valid: false, error: 'Too many incorrect attempts. Request a new OTP.' });
+    return res.status(429).json({ valid: false, error: 'Too many incorrect attempts. Request a new OTP.' });
   }
 
   /* ── Fetch stored OTP ── */
-  const stored = await redis.get(`otp:${mobile}`);
+  let stored;
+  try {
+    stored = await redis.get(`otp:${mobile}`);
+  } catch (err) {
+    console.error('[verify-otp] redis get error:', err.message);
+    return res.status(500).json({ valid: false, error: 'Service unavailable. Please try again.' });
+  }
 
   if (!stored) {
-    return json(400, { valid: false, error: 'OTP expired. Please request a new one.' });
+    return res.status(400).json({ valid: false, error: 'OTP expired. Please request a new one.' });
   }
 
   if (String(stored) !== String(otp)) {
-    return json(400, { valid: false, error: 'Incorrect OTP' });
+    return res.status(400).json({ valid: false, error: 'Incorrect OTP' });
   }
 
   /* ── Valid — delete OTP so it can't be reused ── */
-  await redis.del(`otp:${mobile}`);
-  await redis.del(`verify_attempts:${mobile}`);
+  try {
+    await redis.del(`otp:${mobile}`);
+    await redis.del(`verify_attempts:${mobile}`);
+  } catch (err) {
+    console.error('[verify-otp] redis cleanup error:', err.message);
+    // Still return valid — the OTP matched, cleanup failure isn't the client's problem
+  }
 
-  return json(200, { valid: true });
+  return res.status(200).json({ valid: true });
 }
