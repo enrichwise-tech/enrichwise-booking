@@ -41,12 +41,12 @@ export default async function handler(req, res) {
         ? (svcRes.data?.response?.returnvalue?.data || [])
         : [{ error: svcRes.data }];
 
-      // 3. For each service, fetch staff
+      // 3. For each service, fetch staff (correct endpoint is /staffs not /staff)
       const svcWithStaff = [];
       for (const svc of services) {
         const svcId = svc.id || svc.service_id;
         if (!svcId) { svcWithStaff.push(svc); continue; }
-        const staffRes = await zohoGet('/bookings/v1/json/staff', { service_id: svcId });
+        const staffRes = await zohoGet('/bookings/v1/json/staffs', { service_id: svcId });
         svcWithStaff.push({
           ...svc,
           staff: staffRes.ok ? (staffRes.data?.response?.returnvalue?.data || []) : { error: staffRes.data }
