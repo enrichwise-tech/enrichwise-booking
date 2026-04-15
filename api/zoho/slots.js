@@ -77,18 +77,22 @@ export default async function handler(req, res) {
       // Log the raw shape once on day 0 so we can see what Zoho actually returns
       if (i === 0) console.log('[zoho/slots] raw response for', dateStr, ':', JSON.stringify(r.data).slice(0, 800));
 
-      // Zoho's availableslots response shape (v1):
-      //   { response: { returnvalue: { data: ["09:00 AM","09:30 AM", ...] } } }
-      // But it can also nest differently. Try a few shapes.
       const rv = r.data?.response?.returnvalue;
-      let slots = [];
-      if (Array.isArray(rv?.data)) slots = rv.data;
-      else if (Array.isArray(rv?.response)) slots = rv.response;
-      else if (Array.isArray(rv)) slots = rv;
+      let rawSlots = [];
+      if (Array.isArray(rv?.data)) rawSlots = rv.data;
+      else if (Array.isArray(rv?.response)) rawSlots = rv.response;
+      else if (Array.isArray(rv)) rawSlots = rv;
       else if (rv && typeof rv === 'object') {
-        // Sometimes Zoho returns an object with time-keyed entries
-        slots = Object.values(rv).filter(v => typeof v === 'string');
+        rawSlots = Object.values(rv).filter(v => typeof v === 'string');
       }
+
+      // Zoho prepends the timezone name (e.g. "Asia/Calcutta") and emits
+      // "Slots Not Available" when a day has none. Keep only strings that
+      // look like a clock time.
+      const timePattern = /^\d{1,2}:\d{2}\s?(AM|PM)?$/i;
+      const slots = rawSlots
+        .map(s => (typeof s === 'string' ? s.trim() : (s?.time || s?.from_time || '')))
+        .filter(s => timePattern.test(s));
 
       if (slots.length > 0) {
         results.push({ date: dateStr, iso, slots });
