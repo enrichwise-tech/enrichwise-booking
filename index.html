@@ -707,6 +707,13 @@ function trackEvent(type, extra) {
       mobile: state.mob || '',
       country_code: state.cc || '',
       track: state.track || '',
+      // Include contextual fields so backend can upsert CRM with full picture
+      name: state.name || '',
+      email: state.email || '',
+      corpus: state.corpusLabel || '',
+      topics: state.topics || [],
+      mode: state.mode || '',
+      platform: state.platform || '',
       ts: Date.now()
     }, extra || {});
     fetch(API_BASE + '/api/track-event', {

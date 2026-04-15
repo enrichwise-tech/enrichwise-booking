@@ -76,7 +76,7 @@ export async function getAccessToken() {
   return refreshAccessToken();
 }
 
-async function zohoFetch(path, { method = 'GET', query, body, retryOn401 = true } = {}) {
+async function zohoFetch(path, { method = 'GET', query, body, json = false, retryOn401 = true } = {}) {
   const token = await getAccessToken();
 
   let url = `${ZOHO_API}${path}`;
@@ -89,9 +89,14 @@ async function zohoFetch(path, { method = 'GET', query, body, retryOn401 = true 
     method,
     headers: { 'Authorization': `Zoho-oauthtoken ${token}` }
   };
-  if (body) {
-    init.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    init.body = body instanceof URLSearchParams ? body.toString() : new URLSearchParams(body).toString();
+  if (body !== undefined) {
+    if (json) {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = typeof body === 'string' ? body : JSON.stringify(body);
+    } else {
+      init.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      init.body = body instanceof URLSearchParams ? body.toString() : new URLSearchParams(body).toString();
+    }
   }
 
   const res = await fetch(url, init);
@@ -103,7 +108,7 @@ async function zohoFetch(path, { method = 'GET', query, body, retryOn401 = true 
       const redis = getRedis();
       await redis.del(TOKEN_KEY);
     } catch {}
-    return zohoFetch(path, { method, query, body, retryOn401: false });
+    return zohoFetch(path, { method, query, body, json, retryOn401: false });
   }
 
   let data;
@@ -118,4 +123,17 @@ export function zohoGet(path, query) {
 
 export function zohoPost(path, body) {
   return zohoFetch(path, { method: 'POST', body });
+}
+
+// JSON variants for Zoho CRM v6 API (which expects application/json)
+export function zohoGetJson(path, query) {
+  return zohoFetch(path, { query });
+}
+
+export function zohoPostJson(path, body) {
+  return zohoFetch(path, { method: 'POST', body, json: true });
+}
+
+export function zohoPutJson(path, body) {
+  return zohoFetch(path, { method: 'PUT', body, json: true });
 }

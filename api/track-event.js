@@ -15,6 +15,7 @@
  *   }
  */
 import { logEvent } from './_events.js';
+import { upsertFunnelLead } from './zoho/_crm.js';
 
 const ALLOWED_TYPES = new Set([
   'otp_sent',
@@ -55,23 +56,50 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid country_code' });
   }
 
+  const evt = {
+    type,
+    mobile,
+    country_code: cc,
+    track: body.track || '',
+    corpus: body.corpus || undefined,
+    topics: body.topics || undefined,
+    mode: body.mode || undefined,
+    date: body.date || undefined,
+    slot: body.slot || undefined,
+    booking_id: body.booking_id || undefined,
+    ts: body.ts || Date.now()
+  };
+
   try {
-    await logEvent({
-      type,
+    await logEvent(evt);
+  } catch (err) {
+    console.error('[track-event] log error:', err.message);
+    // Continue — event logging failure shouldn't break CRM mirroring
+  }
+
+  // Mirror to Zoho CRM (non-fatal). Skip for types that don't need a CRM touch.
+  const CRM_STAGES = new Set([
+    'otp_verified', 'corpus_selected', 'details_submitted',
+    'slot_picked', 'booking_created', 'gbp_redirected'
+  ]);
+  if (mobile && CRM_STAGES.has(type)) {
+    upsertFunnelLead({
+      stage: type,
       mobile,
       country_code: cc,
-      track: body.track || '',
-      corpus: body.corpus || undefined,
-      topics: body.topics || undefined,
-      mode: body.mode || undefined,
-      date: body.date || undefined,
-      slot: body.slot || undefined,
-      booking_id: body.booking_id || undefined,
-      ts: body.ts || Date.now()
+      name: body.name,
+      email: body.email,
+      corpus: body.corpus,
+      topics: body.topics,
+      mode: body.mode,
+      platform: body.platform,
+      date: body.date,
+      slot: body.slot,
+      booking_id: body.booking_id
+    }).catch((err) => {
+      console.error('[track-event] CRM upsert error:', err.message);
     });
-    return res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error('[track-event] error:', err.message);
-    return res.status(500).json({ error: err.message });
   }
+
+  return res.status(200).json({ ok: true });
 }
