@@ -186,11 +186,12 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .restart { font-size: 12px; color: var(--ink-3); text-align: center; margin-top: 1rem; cursor: pointer; }
 .restart:hover { color: var(--ink); }
 
-/* Form fields (name/email) */
+/* Form fields (name/email/intake) */
 .field-label {
   display: block; font-size: 12px; font-weight: 600; color: var(--ink-2);
-  margin-bottom: 6px; margin-top: 14px; text-transform: uppercase; letter-spacing: 0.3px;
+  margin-bottom: 6px; margin-top: 16px; text-transform: uppercase; letter-spacing: 0.3px;
 }
+.req { color: var(--danger); margin-left: 2px; }
 .field {
   width: 100%; padding: 13px 14px; font-size: 15px;
   border: 1px solid var(--border); border-radius: var(--radius);
@@ -198,6 +199,18 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
   font-family: inherit; transition: border-color 0.15s;
 }
 .field:focus { border-color: var(--brand); }
+
+/* Chip-style checkbox / radio groups */
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 100px;
+  background: var(--surface); font-size: 13px; color: var(--ink);
+  cursor: pointer; transition: all 0.15s; user-select: none;
+}
+.chip input { accent-color: var(--brand); margin: 0; }
+.chip:hover { border-color: var(--brand); }
+.chip:has(input:checked) { background: var(--brand-light); border-color: var(--brand); color: var(--brand-text); font-weight: 500; }
 
 /* Empty slot-day state */
 .no-slots { text-align: center; padding: 1.5rem 0; font-size: 13px; color: var(--ink-3); }
@@ -323,21 +336,41 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     </button>
   </div>
 
-  <!-- STEP 4: Name + Email -->
+  <!-- STEP 4: Details (Name + Email + intake) -->
   <div class="screen" id="s3">
     <button class="back" onclick="go('s2')">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Back
     </button>
     <h1>A few quick details</h1>
-    <p class="sub">So we can prepare for your session.</p>
+    <p class="sub">So your advisor can prepare for the session.</p>
+
     <label class="field-label">Full name</label>
     <input class="field" id="fName" type="text" placeholder="Your full name" oninput="onDetailsInput()" autocomplete="name">
+
     <label class="field-label">Email</label>
     <input class="field" id="fEmail" type="email" placeholder="you@example.com" oninput="onDetailsInput()" autocomplete="email">
+
+    <label class="field-label">I want to discuss <span class="req">*</span></label>
+    <div class="chip-row">
+      <label class="chip"><input type="checkbox" value="Investments" onchange="onDetailsInput()"> Investments</label>
+      <label class="chip"><input type="checkbox" value="Taxation" onchange="onDetailsInput()"> Taxation</label>
+      <label class="chip"><input type="checkbox" value="Insurance" onchange="onDetailsInput()"> Insurance</label>
+    </div>
+
+    <label class="field-label">Preferred mode <span class="req">*</span></label>
+    <div class="chip-row">
+      <label class="chip"><input type="radio" name="mode" value="Normal call" onchange="onDetailsInput()"> Normal call</label>
+      <label class="chip"><input type="radio" name="mode" value="Whatsapp call" onchange="onDetailsInput()"> WhatsApp call</label>
+      <label class="chip"><input type="radio" name="mode" value="Google meet / Zoom call" onchange="onDetailsInput()"> Google Meet / Zoom</label>
+    </div>
+
+    <label class="field-label">Which platform are you currently using for Investments <span class="req">*</span></label>
+    <input class="field" id="fPlatform" type="text" placeholder="e.g. Zerodha, ICICI Direct, none yet" oninput="onDetailsInput()">
+
     <div class="error-msg" id="detailsError">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
-      Please enter a valid name and email
+      <span id="detailsErrorText">Please fill in all required fields</span>
     </div>
     <button class="btn" id="detailsBtn" disabled onclick="submitDetails()">
       <div class="btn-spinner"></div>
@@ -397,6 +430,9 @@ var API_BASE = '';
 var state = {
   mob: '', corpus: '', corpusLabel: '', track: '',
   name: '', email: '',
+  topics: [],        // multi-select: Investments / Taxation / Insurance
+  mode: '',          // single: Normal call / Whatsapp call / Google meet / Zoom call
+  platform: '',      // free text
   slotDate: '', slotDateIso: '', slotTime: ''
 };
 var timerInterval = null;
@@ -550,23 +586,45 @@ function goBooking() {
   setTimeout(function() { document.getElementById('fName').focus(); }, 100);
 }
 
-/* ── Step 4: Name + Email ── */
-function onDetailsInput() {
+/* ── Step 4: Details (name + email + intake) ── */
+function collectDetails() {
   var name = document.getElementById('fName').value.trim();
   var email = document.getElementById('fEmail').value.trim();
-  var valid = name.length >= 2 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+  var platform = document.getElementById('fPlatform').value.trim();
+  var topics = Array.from(document.querySelectorAll('#s3 .chip input[type="checkbox"]:checked')).map(function(i) { return i.value; });
+  var modeEl = document.querySelector('#s3 .chip input[type="radio"][name="mode"]:checked');
+  var mode = modeEl ? modeEl.value : '';
+  return { name: name, email: email, topics: topics, mode: mode, platform: platform };
+}
+
+function onDetailsInput() {
+  var d = collectDetails();
+  var valid = d.name.length >= 2
+    && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)
+    && d.topics.length > 0
+    && !!d.mode
+    && d.platform.length >= 1;
   document.getElementById('detailsBtn').disabled = !valid;
   document.getElementById('detailsError').classList.remove('show');
 }
 
 async function submitDetails() {
-  var name = document.getElementById('fName').value.trim();
-  var email = document.getElementById('fEmail').value.trim();
-  if (name.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  var d = collectDetails();
+  var valid = d.name.length >= 2
+    && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)
+    && d.topics.length > 0
+    && !!d.mode
+    && d.platform.length >= 1;
+  if (!valid) {
+    document.getElementById('detailsErrorText').textContent = 'Please fill in all required fields';
     document.getElementById('detailsError').classList.add('show');
     return;
   }
-  state.name = name; state.email = email;
+  state.name = d.name;
+  state.email = d.email;
+  state.topics = d.topics;
+  state.mode = d.mode;
+  state.platform = d.platform;
   go('s4');
   loadSlots();
 }
@@ -638,13 +696,16 @@ async function bookAppointment() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        track:  state.track,
-        date:   state.slotDate,
-        slot:   state.slotTime,
-        name:   state.name,
-        email:  state.email,
-        mobile: state.mob,
-        corpus: state.corpusLabel
+        track:    state.track,
+        date:     state.slotDate,
+        slot:     state.slotTime,
+        name:     state.name,
+        email:    state.email,
+        mobile:   state.mob,
+        corpus:   state.corpusLabel,
+        topics:   state.topics,
+        mode:     state.mode,
+        platform: state.platform
       })
     });
     var data = await res.json();

@@ -49,9 +49,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body = req.body || {};
-  const { track, date, slot, name, email, mobile, corpus } = body;
+  const { track, date, slot, name, email, mobile, corpus, topics, mode, platform } = body;
 
-  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile });
+  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, topics, mode, platform });
 
   if (!track || !['instant', 'callback'].includes(track)) {
     return res.status(400).json({ error: 'Invalid track' });
@@ -81,10 +81,17 @@ export default async function handler(req, res) {
 
   // Zoho Bookings /appointment is form-encoded with service_id, staff_id,
   // from_time, customer_details (JSON string), plus optional fields.
+  // Flat customer_details with the custom fields inlined alongside name/email/phone.
+  // Zoho Bookings accepts custom-field values under their exact display labels
+  // as keys in customer_details (v1 API).
+  const topicsArr = Array.isArray(topics) ? topics : (topics ? [topics] : []);
   const customerDetails = {
     name,
     email,
-    phone_number: `+91${mobile}`
+    phone_number: `+91${mobile}`,
+    "I want to discuss": topicsArr.join(', '),
+    "Preferred mode": mode || '',
+    "Which platform are you currently using for Investments": platform || ''
   };
 
   const formBody = {
