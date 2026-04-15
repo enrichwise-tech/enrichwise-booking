@@ -67,7 +67,14 @@ body {
 }
 .side-brand { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; }
 .side-tagline { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 4px; }
-.side-quote { margin-top: auto; margin-bottom: auto; }
+.side-quote {
+  margin-top: auto; margin-bottom: auto;
+  position: relative; min-height: 220px;
+}
+.side-quote-inner {
+  transition: opacity 0.4s ease;
+}
+.side-quote-inner.fading { opacity: 0; }
 .side-quote-mark {
   font-size: 48px; font-weight: 700; line-height: 1;
   color: rgba(255,255,255,0.25); margin-bottom: -8px;
@@ -79,6 +86,18 @@ body {
 }
 .side-quote-author {
   display: flex; align-items: center; gap: 12px;
+}
+.side-quote-dots {
+  display: flex; gap: 6px; margin-top: 20px;
+}
+.side-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  transition: background 0.3s, width 0.3s;
+}
+.side-dot.active {
+  background: rgba(255,255,255,0.85);
+  width: 18px; border-radius: 3px;
 }
 .side-avatar {
   width: 40px; height: 40px; border-radius: 50%;
@@ -409,14 +428,17 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       <div class="side-tagline">Financial Services</div>
     </div>
     <div class="side-quote">
-      <div class="side-quote-mark">"</div>
-      <div class="side-quote-text">Until this call, I didn't know that the majority of my funds were under-performing the benchmark.</div>
-      <div class="side-quote-author">
-        <div class="side-avatar">RB</div>
-        <div>
-          <div class="side-author-name">Rajesh B.</div>
-          <div class="side-author-role">Enrichwise client since 2023</div>
+      <div class="side-quote-inner" id="sideQuoteInner">
+        <div class="side-quote-mark">"</div>
+        <div class="side-quote-text" id="sideQuoteText"></div>
+        <div class="side-quote-author">
+          <div class="side-avatar" id="sideAvatar"></div>
+          <div>
+            <div class="side-author-name" id="sideAuthorName"></div>
+            <div class="side-author-role" id="sideAuthorRole"></div>
+          </div>
         </div>
+        <div class="side-quote-dots" id="sideQuoteDots"></div>
       </div>
     </div>
     <div class="side-footer">
@@ -697,7 +719,87 @@ function updateStepIndicator(screenId) {
 }
 
 // Initial render of step indicator on page load
-document.addEventListener('DOMContentLoaded', function() { updateStepIndicator('s0'); });
+document.addEventListener('DOMContentLoaded', function() {
+  updateStepIndicator('s0');
+  initTestimonials();
+});
+
+/* ── Rotating testimonials on the side panel ── */
+var TESTIMONIALS = [
+  {
+    text: "Until this call, I didn't know that the majority of my funds were under-performing the benchmark.",
+    name: 'Rajesh B.',
+    role: 'Enrichwise client since 2023',
+    initials: 'RB'
+  },
+  {
+    text: "The team rebalanced my portfolio within a week of our first meeting. Clear, honest advice — no sales pitch.",
+    name: 'Priya S.',
+    role: 'Mumbai · Priority client',
+    initials: 'PS'
+  },
+  {
+    text: "I was paying 1.5% in hidden commissions across old ULIPs. Enrichwise helped me exit without losing on surrender charges.",
+    name: 'Arjun M.',
+    role: 'Bengaluru · HNI client',
+    initials: 'AM'
+  },
+  {
+    text: "My tax outgo dropped by ₹2.8 L after they restructured my debt and equity allocation for the right holding period.",
+    name: 'Nikhil T.',
+    role: 'Delhi · Enrichwise client',
+    initials: 'NT'
+  },
+  {
+    text: "Planning my daughter's education and my retirement in parallel felt impossible. Now I have a clear 15-year roadmap.",
+    name: 'Meera K.',
+    role: 'Pune · Priority client',
+    initials: 'MK'
+  }
+];
+
+var testimonialIdx = 0;
+var testimonialInterval = null;
+
+function initTestimonials() {
+  if (!document.getElementById('sideQuoteText')) return;
+  // Render the dots once
+  var dotsHtml = TESTIMONIALS.map(function(_, i) {
+    return '<span class="side-dot" data-idx="' + i + '"></span>';
+  }).join('');
+  document.getElementById('sideQuoteDots').innerHTML = dotsHtml;
+  // Random starting index so different users see different first quotes
+  testimonialIdx = Math.floor(Math.random() * TESTIMONIALS.length);
+  renderTestimonial(testimonialIdx, false);
+  // Advance every 6 seconds
+  testimonialInterval = setInterval(function() {
+    testimonialIdx = (testimonialIdx + 1) % TESTIMONIALS.length;
+    renderTestimonial(testimonialIdx, true);
+  }, 6000);
+}
+
+function renderTestimonial(idx, withFade) {
+  var t = TESTIMONIALS[idx];
+  var inner = document.getElementById('sideQuoteInner');
+  if (!inner) return;
+  var apply = function() {
+    document.getElementById('sideQuoteText').textContent = t.text;
+    document.getElementById('sideAvatar').textContent = t.initials;
+    document.getElementById('sideAuthorName').textContent = t.name;
+    document.getElementById('sideAuthorRole').textContent = t.role;
+    var dots = document.querySelectorAll('#sideQuoteDots .side-dot');
+    dots.forEach(function(d, i) { d.classList.toggle('active', i === idx); });
+  };
+  if (withFade) {
+    inner.classList.add('fading');
+    setTimeout(function() {
+      apply();
+      inner.classList.remove('fading');
+    }, 400);
+  } else {
+    apply();
+  }
+}
 
 // Fire-and-forget event logging for funnel tracking
 function trackEvent(type, extra) {
