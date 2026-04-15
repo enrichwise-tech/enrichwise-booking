@@ -81,14 +81,17 @@ export default async function handler(req, res) {
 
   // Zoho Bookings /appointment is form-encoded with service_id, staff_id,
   // from_time, customer_details (JSON string), plus optional fields.
-  // Flat customer_details with the custom fields inlined alongside name/email/phone.
-  // Zoho Bookings accepts custom-field values under their exact display labels
-  // as keys in customer_details (v1 API).
+  // Zoho Bookings v1 separates built-in fields (customer_details) from
+  // service-specific custom fields (additional_fields).
   const topicsArr = Array.isArray(topics) ? topics : (topics ? [topics] : []);
+
   const customerDetails = {
     name,
     email,
-    phone_number: `+91${mobile}`,
+    phone_number: `+91${mobile}`
+  };
+
+  const additionalFields = {
     "I want to discuss": topicsArr.join(', '),
     "Preferred mode": mode || '',
     "Which platform are you currently using for Investments": platform || ''
@@ -99,6 +102,7 @@ export default async function handler(req, res) {
     staff_id: staffId,
     from_time: `${date} ${time24}`,            // e.g. "16-Apr-2026 16:30:00"
     customer_details: JSON.stringify(customerDetails),
+    additional_fields: JSON.stringify(additionalFields),
     time_zone: TIME_ZONE,
     notes: `Corpus: ${corpus || 'not specified'}`
   };
