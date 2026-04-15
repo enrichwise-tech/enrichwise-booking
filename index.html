@@ -510,8 +510,8 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       <div class="conf-row"><span class="conf-key">Mobile</span><span class="conf-val" id="cMobile"></span></div>
       <div class="conf-row"><span class="conf-key">Service</span><span class="conf-val" id="cService"></span></div>
       <div class="conf-row"><span class="conf-key">Date &amp; time</span><span class="conf-val" id="cWhen"></span></div>
+      <div class="conf-row"><span class="conf-key">Mode</span><span class="conf-val" id="cMode"></span></div>
     </div>
-    <div class="restart" onclick="location.reload()">Book another appointment</div>
   </div>
 
 </div>
@@ -522,6 +522,10 @@ var API_BASE = '';
 
 /* ── CONFIG: Zoho Form URL for clients with corpus under ₹1 Cr ── */
 var GBP_FORM_URL = 'https://zfrmz.in/f5vp4U5hKA6tIqG2XwQc';
+
+/* ── CONFIG: Name shown on the confirmation screen. Keep in sync with the
+   Zoho Bookings service name so clients see the same label they'd see in Zoho. */
+var SERVICE_NAME = 'Private consultation (Online)';
 
 var state = {
   mob: '', cc: '91', corpus: '', corpusLabel: '', track: '',
@@ -907,8 +911,9 @@ async function bookAppointment() {
     // Populate confirmation
     document.getElementById('cName').textContent    = state.name;
     document.getElementById('cMobile').textContent  = '+' + state.cc + ' ' + state.mob;
-    document.getElementById('cService').textContent = 'Priority Wealth Session';
+    document.getElementById('cService').textContent = SERVICE_NAME;
     document.getElementById('cWhen').textContent    = state.slotDate + ' · ' + state.slotTime;
+    document.getElementById('cMode').textContent    = state.mode || '—';
     go('s5');
   } catch (err) {
     document.getElementById('slotsErrorText').textContent = err.message;
