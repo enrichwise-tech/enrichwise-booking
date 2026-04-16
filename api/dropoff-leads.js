@@ -12,8 +12,8 @@
  *
  * Protected by CRON_SECRET (Vercel injects this automatically for cron jobs).
  */
-import { getRedis } from '../_redis.js';
-import { upsertFunnelLead } from '../zoho/_crm.js';
+import { getRedis } from './_redis.js';
+import { upsertFunnelLead } from './zoho/_crm.js';
 
 const PUSHED_SET = 'crm:pushed';           // Redis set of "cc:mobile" already pushed
 const PUSHED_TTL = 60 * 60 * 24 * 30;      // 30-day retention on the set
