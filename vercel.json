@@ -3,16 +3,13 @@
   "cleanUrls": true,
   "functions": {
     "api/*.js": {
-      "maxDuration": 30
-    },
-    "api/dropoff-leads.js": {
       "maxDuration": 60
     }
   },
   "crons": [
     {
       "path": "/api/dropoff-leads",
-      "schedule": "0 2,10,18 * * *"
+      "schedule": "30 2 * * *"
     }
   ],
   "rewrites": [
