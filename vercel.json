@@ -5,13 +5,13 @@
     "api/*.js": {
       "maxDuration": 30
     },
-    "api/cron/*.js": {
+    "api/dropoff-leads.js": {
       "maxDuration": 60
     }
   },
   "crons": [
     {
-      "path": "/api/cron/dropoff-leads",
+      "path": "/api/dropoff-leads",
       "schedule": "0 2,10,18 * * *"
     }
   ],
