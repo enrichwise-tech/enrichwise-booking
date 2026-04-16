@@ -15,7 +15,6 @@
  *   }
  */
 import { logEvent } from './_events.js';
-import { upsertFunnelLead } from './zoho/_crm.js';
 
 const ALLOWED_TYPES = new Set([
   'otp_sent',
@@ -77,29 +76,12 @@ export default async function handler(req, res) {
     // Continue — event logging failure shouldn't break CRM mirroring
   }
 
-  // Mirror to Zoho CRM (non-fatal). Skip for types that don't need a CRM touch.
-  const CRM_STAGES = new Set([
-    'otp_verified', 'corpus_selected', 'details_submitted',
-    'slot_picked', 'booking_created', 'gbp_redirected'
-  ]);
-  if (mobile && CRM_STAGES.has(type)) {
-    upsertFunnelLead({
-      stage: type,
-      mobile,
-      country_code: cc,
-      name: body.name,
-      email: body.email,
-      corpus: body.corpus,
-      topics: body.topics,
-      mode: body.mode,
-      platform: body.platform,
-      date: body.date,
-      slot: body.slot,
-      booking_id: body.booking_id
-    }).catch((err) => {
-      console.error('[track-event] CRM upsert error:', err.message);
-    });
-  }
+  // CRM Lead creation is DISABLED in the live flow to avoid duplicates with
+  // Zoho Bookings' built-in CRM integration (which creates Leads on completed
+  // bookings automatically). Corpus is captured in the booking's notes field.
+  //
+  // Drop-offs are tracked via the /api/events dashboard (Upstash).
+  // A future scheduled task will create CRM Leads for drop-offs only.
 
   return res.status(200).json({ ok: true });
 }
