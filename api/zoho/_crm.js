@@ -95,12 +95,12 @@ export async function upsertFunnelLead(info = {}) {
   fields.Phone = fullPhone;
   fields.Lead_Source = 'Enrichwise Booking App';
 
-  // Lead_Status mapping — use standard Zoho CRM picklist values for compatibility.
+  // Lead_Status mapping — must match your Zoho CRM Lead_Status picklist values exactly.
   if (stage === 'booking_created') {
     fields.Lead_Status = 'Contacted';
   } else if (!existing) {
     // Only set on create; don't overwrite a team-managed status later
-    fields.Lead_Status = 'Not Contacted';
+    fields.Lead_Status = 'New Lead';
   }
 
   // Description log — append new stage to existing log, or start fresh
