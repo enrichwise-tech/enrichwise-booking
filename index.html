@@ -65,15 +65,17 @@ body {
   flex-direction: column;
   justify-content: space-between;
 }
-.side-brand-row {
-  display: flex; align-items: center; gap: 12px;
-}
-.side-logo {
-  height: 48px; width: auto;
-  mix-blend-mode: multiply;
-}
 .side-brand-text {
   font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.3px;
+}
+.form-logo {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 2rem;
+}
+.form-logo img { height: 44px; width: auto; }
+.form-logo-text { font-size: 18px; font-weight: 700; color: var(--ink); letter-spacing: -0.3px; }
+@media (min-width: 861px) {
+  .form-logo { display: none; }
 }
 .side-tagline { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 4px; letter-spacing: 0.3px; }
 .side-quote {
@@ -439,10 +441,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
   <!-- Left: testimonial panel (desktop only) -->
   <aside class="side-panel">
     <div>
-      <div class="side-brand-row">
-        <img src="/logo.png" alt="" class="side-logo">
-        <div class="side-brand-text">Enrichwise</div>
-      </div>
+      <div class="side-brand-text">Enrichwise</div>
       <div class="side-tagline">Give Wings To Your Dreams</div>
     </div>
     <div class="side-quote">
@@ -479,6 +478,10 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       </a>
     </div>
     <div class="shell">
+      <div class="form-logo">
+        <img src="/logo.png" alt="Enrichwise">
+        <span class="form-logo-text">Enrichwise</span>
+      </div>
       <div class="brand">Enrichwise</div>
 
   <!-- STEP 1: Mobile -->
