@@ -582,6 +582,29 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     </button>
   </div>
 
+  <!-- STEP 3B: GBP interstitial (Under ₹1 Cr) -->
+  <div class="screen" id="s2b" data-hide-step="1">
+    <button class="back" onclick="go('s2')">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </button>
+    <div class="success-icon" style="background: var(--brand-light);">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M7 16.5L8.5 9l5 3.5L22 7l-2 8.5-5-2L7 16.5z" stroke="#1D9E75" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 25h20" stroke="#1D9E75" stroke-width="2" stroke-linecap="round"/></svg>
+    </div>
+    <h1>We'll build your personalised plan</h1>
+    <p class="sub">Answer a few quick questions about your goals — our team will create a custom financial roadmap and share it within 48 hours.</p>
+
+    <label class="field-label">Full name</label>
+    <input class="field" id="gbpName" type="text" placeholder="Your full name" oninput="onGbpInput()" autocomplete="name">
+
+    <label class="field-label">Email</label>
+    <input class="field" id="gbpEmail" type="email" placeholder="you@example.com" oninput="onGbpInput()" autocomplete="email">
+
+    <button class="btn" id="gbpBtn" disabled onclick="goToGbpForm()">
+      <span class="btn-text">Start the questionnaire →</span>
+    </button>
+  </div>
+
   <!-- STEP 4: Details (Name + Email + intake) -->
   <div class="screen" id="s3">
     <button class="back" onclick="go('s2')">
@@ -1003,15 +1026,32 @@ function pickCorpus(el, corpus, track, label) {
 function goBooking() {
   trackEvent('corpus_selected', { corpus: state.corpusLabel });
   if (state.track === 'gbp') {
-    // Under ₹1 Cr — redirect to the goal-based plan Zoho form instead of the
-    // call-booking flow. Pass mobile as a URL param in case the form pre-fills.
-    trackEvent('gbp_redirected');
-    var url = GBP_FORM_URL + '?mobile=' + encodeURIComponent('+' + state.cc + state.mob);
-    window.location.href = url;
+    go('s2b');
+    setTimeout(function() { document.getElementById('gbpName').focus(); }, 100);
     return;
   }
   go('s3');
   setTimeout(function() { document.getElementById('fName').focus(); }, 100);
+}
+
+/* ── Step 3B: GBP interstitial ── */
+function onGbpInput() {
+  var name = document.getElementById('gbpName').value.trim();
+  var email = document.getElementById('gbpEmail').value.trim();
+  var valid = name.length >= 2 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+  document.getElementById('gbpBtn').disabled = !valid;
+}
+
+function goToGbpForm() {
+  var name = document.getElementById('gbpName').value.trim();
+  var email = document.getElementById('gbpEmail').value.trim();
+  state.name = name;
+  state.email = email;
+  trackEvent('gbp_redirected', { name: name, email: email });
+  var url = GBP_FORM_URL
+    + '?mobile=' + encodeURIComponent('+' + state.cc + state.mob)
+    + '&email=' + encodeURIComponent(email);
+  window.open(url, '_blank');
 }
 
 /* ── Step 4: Details (name + email + intake) ── */
