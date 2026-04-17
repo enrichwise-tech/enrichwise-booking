@@ -929,6 +929,10 @@ function otpType(idx) {
   document.getElementById('verBtn').disabled = full.length < 6;
   document.getElementById('otpError').classList.remove('show');
   boxes.forEach(function(b) { b.classList.remove('err'); });
+  // Auto-verify when all 6 digits are entered
+  if (full.length === 6) {
+    setTimeout(function() { verifyOtp(); }, 150);
+  }
 }
 
 function otpKey(e, idx) {
@@ -1050,7 +1054,8 @@ function goToGbpForm() {
   trackEvent('gbp_redirected', { name: name, email: email });
   var url = GBP_FORM_URL
     + '?mobile=' + encodeURIComponent('+' + state.cc + state.mob)
-    + '&email=' + encodeURIComponent(email);
+    + '&email=' + encodeURIComponent(email)
+    + '&name=' + encodeURIComponent(name);
   window.open(url, '_blank');
 }
 
