@@ -65,6 +65,14 @@ body {
   flex-direction: column;
   justify-content: space-between;
 }
+.side-brand-row {
+  display: flex; align-items: center; gap: 12px;
+}
+.side-logo {
+  height: 48px; width: auto;
+  mix-blend-mode: screen;
+  filter: invert(1);
+}
 .side-brand-text {
   font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.3px;
 }
@@ -432,7 +440,10 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
   <!-- Left: testimonial panel (desktop only) -->
   <aside class="side-panel">
     <div>
-      <div class="side-brand-text">Enrichwise</div>
+      <div class="side-brand-row">
+        <img src="/logo.png" alt="" class="side-logo">
+        <div class="side-brand-text">Enrichwise</div>
+      </div>
       <div class="side-tagline">Give Wings To Your Dreams</div>
     </div>
     <div class="side-quote">
