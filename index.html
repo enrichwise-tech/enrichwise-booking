@@ -800,27 +800,58 @@ function handleGbpReturn() {
   var name = params.get('name') || '';
   var email = params.get('email') || '';
 
-  // Strip country code — keep last 10 digits for India, otherwise last 10
-  var mobile10 = mobileRaw.slice(-10);
+  // Infer CC + local number from the mobile param. Indian numbers are 10 digits;
+  // CC is everything before the last 10. Default to 91 if we can't tell.
+  var mobile10, cc;
+  if (mobileRaw.length > 10) {
+    mobile10 = mobileRaw.slice(-10);
+    cc = mobileRaw.slice(0, mobileRaw.length - 10) || '91';
+  } else {
+    mobile10 = mobileRaw;
+    cc = '91';
+  }
+
   if (mobile10.length >= 10) {
     document.getElementById('mob').value = mobile10;
+    document.getElementById('cc').value = cc;
     onMobInput();
   }
 
+  state.mob = mobile10;
+  state.cc = cc;
   state.name = name;
   state.email = email;
   state.fromGbp = true;
-
-  // Show welcome banner + update copy
-  var banner = document.getElementById('gbpWelcome');
-  if (banner) banner.style.display = 'block';
-  var sub = document.getElementById('mobSub');
-  if (sub) sub.textContent = 'Confirm your mobile to receive an OTP.';
 
   // Clear URL so params don't persist on reload
   try { window.history.replaceState({}, '', window.location.pathname); } catch(e) {}
 
   trackEvent('gbp_return');
+
+  // If this number was OTP-verified in the last 60 min, skip OTP entirely
+  // and drop them straight into the details → slot flow
+  var verifiedAt = 0;
+  try { verifiedAt = parseInt(localStorage.getItem('otp_ok:' + cc + mobile10) || '0', 10); } catch(e) {}
+  var fresh = verifiedAt && (Date.now() - verifiedAt < 60 * 60 * 1000);
+
+  if (fresh) {
+    // Pre-set track + skip corpus + pre-fill details
+    state.track = 'instant';
+    state.corpus = 'gbp_client';
+    state.corpusLabel = 'Goal-based plan client';
+    setTimeout(function() {
+      if (state.name) document.getElementById('fName').value = state.name;
+      if (state.email) document.getElementById('fEmail').value = state.email;
+      onDetailsInput();
+      go('s3');
+    }, 50);
+  } else {
+    // Show welcome banner + ask for OTP re-verification
+    var banner = document.getElementById('gbpWelcome');
+    if (banner) banner.style.display = 'block';
+    var sub = document.getElementById('mobSub');
+    if (sub) sub.textContent = 'Confirm your mobile to receive an OTP.';
+  }
 }
 
 /* ── Rotating testimonials on the side panel ── */
@@ -1029,6 +1060,12 @@ async function verifyOtp() {
     if (!res.ok || !data.valid) throw new Error('invalid');
     clearInterval(timerInterval);
     trackEvent('otp_verified');
+    // Remember this verification for 60 min so if the user re-enters after
+    // the GBP form, we can skip re-OTP on the same number
+    try {
+      var fullKey = 'otp_ok:' + state.cc + state.mob;
+      localStorage.setItem(fullKey, String(Date.now()));
+    } catch(e) {}
     if (state.fromGbp) {
       // User came back from GBP form — skip corpus, auto-set to Priority track
       state.track = 'instant';
