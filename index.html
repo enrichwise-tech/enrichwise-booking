@@ -94,8 +94,6 @@ body {
   color: #fff; margin-bottom: 18px;
   letter-spacing: -0.2px;
 }
-.side-quote-text::before { content: '\201C'; }
-.side-quote-text::after  { content: '\201D'; }
 .side-quote-author {
   display: flex; align-items: center; gap: 12px;
 }
@@ -1057,7 +1055,7 @@ function renderTestimonial(idx, withFade) {
       dots.forEach(function(d, i) { d.classList.toggle('active', i === idx); });
     }
     if (mobileCard) {
-      document.getElementById('mobileQuoteText').textContent = '\u201C' + t.text + '\u201D';
+      document.getElementById('mobileQuoteText').textContent = t.text;
       document.getElementById('mobileAvatar').textContent = t.initials;
       document.getElementById('mobileAuthorName').textContent = t.name;
     }
