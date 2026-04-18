@@ -605,6 +605,21 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     </button>
   </div>
 
+  <!-- STEP 3C: GBP redirected confirmation -->
+  <div class="screen" id="s2c" data-hide-step="1">
+    <div class="success-icon">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M9 16l5 5 10-10" stroke="#1D9E75" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="success-text">
+      <h1>Questionnaire opened in a new tab</h1>
+      <p class="sub">Complete it there — our team will review your answers and reach out to you on WhatsApp and email.</p>
+    </div>
+    <div class="info-box">
+      <div class="info-title">Didn't see the new tab?</div>
+      <div class="info-body">Your browser may have blocked it. <a href="#" id="gbpRetryLink" style="color: var(--brand); text-decoration: underline; cursor: pointer;">Click here to open the questionnaire</a>.</div>
+    </div>
+  </div>
+
   <!-- STEP 4: Details (Name + Email + intake) -->
   <div class="screen" id="s3">
     <button class="back" onclick="go('s2')">
@@ -1057,6 +1072,15 @@ function goToGbpForm() {
     + '&email=' + encodeURIComponent(email)
     + '&name=' + encodeURIComponent(name);
   window.open(url, '_blank');
+  // Wire retry link on the confirmation screen to open the same URL again
+  var retry = document.getElementById('gbpRetryLink');
+  if (retry) {
+    retry.onclick = function(e) {
+      e.preventDefault();
+      window.open(url, '_blank');
+    };
+  }
+  go('s2c');
 }
 
 /* ── Step 4: Details (name + email + intake) ── */
