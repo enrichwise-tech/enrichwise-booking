@@ -85,14 +85,17 @@ body {
 }
 .side-quote-inner.fading { opacity: 0; }
 .side-quote-mark {
-  font-size: 48px; font-weight: 700; line-height: 1;
-  color: rgba(255,255,255,0.25); margin-bottom: -8px;
+  font-size: 72px; font-weight: 700; line-height: 0.6;
+  color: rgba(255,255,255,0.25); margin-bottom: 8px;
+  font-family: Georgia, 'Times New Roman', serif;
 }
 .side-quote-text {
   font-size: 18px; line-height: 1.5; font-weight: 500;
   color: #fff; margin-bottom: 18px;
   letter-spacing: -0.2px;
 }
+.side-quote-text::before { content: '\201C'; }
+.side-quote-text::after  { content: '\201D'; }
 .side-quote-author {
   display: flex; align-items: center; gap: 12px;
 }
@@ -475,7 +478,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     </div>
     <div class="side-quote">
       <div class="side-quote-inner" id="sideQuoteInner">
-        <div class="side-quote-mark">"</div>
+        <div class="side-quote-mark">&ldquo;</div>
         <div class="side-quote-text" id="sideQuoteText"></div>
         <div class="side-quote-author">
           <div class="side-avatar" id="sideAvatar"></div>
@@ -910,12 +913,6 @@ var TESTIMONIALS = [
     initials: 'DK'
   },
   {
-    text: "The team is professional, yet approachable and friendly. They don't just suggest investments — they explain things in a simple way so I can make informed decisions.",
-    name: 'Rathod Sunil',
-    role: 'Enrichwise client',
-    initials: 'RS'
-  },
-  {
     text: "Their commitment shines through in every step of financial modeling and funds management. They took time to understand my needs and delivered results that truly made a difference.",
     name: 'Pratyaksh Veer',
     role: 'Enrichwise client',
@@ -968,6 +965,60 @@ var TESTIMONIALS = [
     name: 'Pritesh Shetty',
     role: 'Enrichwise client · NRI',
     initials: 'PS'
+  },
+  {
+    text: "I was truly impressed by the warmth, courtesy, and professionalism shown by every member of the team. The service provided was truly second to none.",
+    name: 'Manoj Bhatnagar',
+    role: 'Enrichwise client',
+    initials: 'MB'
+  },
+  {
+    text: "Exceptional service consistently received over the past three years. Attention to detail and dedication to customer satisfaction have been evident throughout every interaction.",
+    name: 'Phani Krishna',
+    role: 'Enrichwise client · 3 years',
+    initials: 'PK'
+  },
+  {
+    text: "Associated with Enrichwise for 8 years. The team helped me create a solid portfolio in savings and investments. Always responsive and helpful.",
+    name: 'Shailesh Kulkarni',
+    role: 'Enrichwise client · 8 years',
+    initials: 'SK'
+  },
+  {
+    text: "The team is always innovative with new ideas for faster, safer service. Response time is excellent — they keep clients updated with the latest investment opportunities.",
+    name: 'Bhagwan Bhat',
+    role: 'Enrichwise client',
+    initials: 'BB'
+  },
+  {
+    text: "The transparency and professionalism have earned my trust and confidence — a top-notch choice for anyone seeking expert financial advice.",
+    name: 'Swaminathan Anand',
+    role: 'Enrichwise client',
+    initials: 'SA'
+  },
+  {
+    text: "One stop for all financial services with solutions for mutual funds, PMS, AIFs, bonds, and retirement. Their approach is detailed, well-planned, transparent, and deeply understanding of your needs.",
+    name: 'Pradip Shirsat',
+    role: 'Enrichwise client · 6 years',
+    initials: 'PS'
+  },
+  {
+    text: "A professional, knowledgeable, yet easily approachable team of financial consultants. Associated with them for over a decade now.",
+    name: 'Vikram More',
+    role: 'Enrichwise client · 10+ years',
+    initials: 'VM'
+  },
+  {
+    text: "All my mutual fund investments and ITR filings have been through Enrichwise for years. The team is extremely professional and dedicated — advice has always been helpful.",
+    name: 'Veena K',
+    role: 'Enrichwise client',
+    initials: 'VK'
+  },
+  {
+    text: "Amazing in terms of ethical, financial, and tax advice — quick to respond, accurate, punctual. Genuine advice, no false promises. An enriching experience.",
+    name: 'Ramesh NV',
+    role: 'Enrichwise client · 3 years',
+    initials: 'RN'
   }
 ];
 
@@ -1006,7 +1057,7 @@ function renderTestimonial(idx, withFade) {
       dots.forEach(function(d, i) { d.classList.toggle('active', i === idx); });
     }
     if (mobileCard) {
-      document.getElementById('mobileQuoteText').textContent = '"' + t.text + '"';
+      document.getElementById('mobileQuoteText').textContent = '\u201C' + t.text + '\u201D';
       document.getElementById('mobileAvatar').textContent = t.initials;
       document.getElementById('mobileAuthorName').textContent = t.name;
     }
