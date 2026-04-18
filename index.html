@@ -99,6 +99,37 @@ body {
 .side-quote-dots {
   display: flex; gap: 6px; margin-top: 20px;
 }
+
+/* Mobile testimonial card — shown only on narrow screens where the sidebar is hidden */
+.mobile-quote {
+  display: none;
+  background: linear-gradient(180deg, #0F6E56 0%, #085041 100%);
+  color: #fff;
+  padding: 14px 16px;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  transition: opacity 0.4s ease;
+}
+.mobile-quote.fading { opacity: 0; }
+.mobile-quote-text {
+  font-size: 13px; line-height: 1.5; color: #fff; margin-bottom: 10px;
+}
+.mobile-quote-author {
+  display: flex; align-items: center; gap: 8px;
+}
+.mobile-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,0.15); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.2);
+  flex-shrink: 0;
+}
+.mobile-author-name { font-size: 12px; font-weight: 600; color: #fff; }
+.mobile-author-stars { font-size: 11px; color: #ffd04a; letter-spacing: 1px; }
+@media (max-width: 860px) {
+  .mobile-quote { display: block; }
+}
 .side-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: rgba(255,255,255,0.25);
@@ -487,6 +518,16 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     <div id="gbpWelcome" style="display: none; background: var(--brand-light); border: 1px solid rgba(29,158,117,0.25); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 1.5rem;">
       <div style="font-size: 14px; font-weight: 600; color: var(--brand-text); margin-bottom: 4px;">✓ Plan request received</div>
       <div style="font-size: 13px; color: var(--ink-2); line-height: 1.5;">Thanks for submitting your goals. Let's also book a quick call with our team to walk you through the plan.</div>
+    </div>
+    <div class="mobile-quote" id="mobileQuote">
+      <div class="mobile-quote-text" id="mobileQuoteText"></div>
+      <div class="mobile-quote-author">
+        <div class="mobile-avatar" id="mobileAvatar"></div>
+        <div>
+          <div class="mobile-author-name" id="mobileAuthorName"></div>
+          <div class="mobile-author-stars">★★★★★</div>
+        </div>
+      </div>
     </div>
     <h1 id="mobTitle">Book an appointment</h1>
     <p class="sub" id="mobSub">Enter your mobile number to get started.</p>
@@ -953,20 +994,30 @@ function initTestimonials() {
 function renderTestimonial(idx, withFade) {
   var t = TESTIMONIALS[idx];
   var inner = document.getElementById('sideQuoteInner');
-  if (!inner) return;
+  var mobileCard = document.getElementById('mobileQuote');
+  if (!inner && !mobileCard) return;
   var apply = function() {
-    document.getElementById('sideQuoteText').textContent = t.text;
-    document.getElementById('sideAvatar').textContent = t.initials;
-    document.getElementById('sideAuthorName').textContent = t.name;
-    document.getElementById('sideAuthorRole').textContent = t.role;
-    var dots = document.querySelectorAll('#sideQuoteDots .side-dot');
-    dots.forEach(function(d, i) { d.classList.toggle('active', i === idx); });
+    if (inner) {
+      document.getElementById('sideQuoteText').textContent = t.text;
+      document.getElementById('sideAvatar').textContent = t.initials;
+      document.getElementById('sideAuthorName').textContent = t.name;
+      document.getElementById('sideAuthorRole').textContent = t.role;
+      var dots = document.querySelectorAll('#sideQuoteDots .side-dot');
+      dots.forEach(function(d, i) { d.classList.toggle('active', i === idx); });
+    }
+    if (mobileCard) {
+      document.getElementById('mobileQuoteText').textContent = '"' + t.text + '"';
+      document.getElementById('mobileAvatar').textContent = t.initials;
+      document.getElementById('mobileAuthorName').textContent = t.name;
+    }
   };
   if (withFade) {
-    inner.classList.add('fading');
+    if (inner) inner.classList.add('fading');
+    if (mobileCard) mobileCard.classList.add('fading');
     setTimeout(function() {
       apply();
-      inner.classList.remove('fading');
+      if (inner) inner.classList.remove('fading');
+      if (mobileCard) mobileCard.classList.remove('fading');
     }, 400);
   } else {
     apply();
