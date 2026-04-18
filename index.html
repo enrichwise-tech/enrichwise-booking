@@ -128,18 +128,43 @@ body {
 }
 .mobile-author-name { font-size: 12px; font-weight: 600; color: #fff; }
 .mobile-author-stars { font-size: 11px; color: #ffd04a; letter-spacing: 1px; }
+.mobile-quote { cursor: pointer; user-select: none; touch-action: pan-y; }
+.mobile-quote-nav {
+  display: flex; justify-content: center; gap: 5px; margin-top: 10px;
+}
+.mobile-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(255,255,255,0.3); border: none; padding: 0; cursor: pointer;
+  transition: background 0.2s, width 0.2s;
+}
+.mobile-dot.active { background: rgba(255,255,255,0.9); width: 14px; border-radius: 3px; }
 @media (max-width: 860px) {
   .mobile-quote { display: block; }
 }
 .side-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: rgba(255,255,255,0.25);
-  transition: background 0.3s, width 0.3s;
+  transition: background 0.2s, width 0.2s;
+  cursor: pointer;
+  border: none; padding: 0;
 }
+.side-dot:hover { background: rgba(255,255,255,0.5); }
 .side-dot.active {
   background: rgba(255,255,255,0.85);
   width: 18px; border-radius: 3px;
 }
+.side-quote-inner { cursor: pointer; }
+.side-quote-nav {
+  display: flex; gap: 10px; margin-top: 12px; align-items: center;
+}
+.side-quote-arrow {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: #fff; cursor: pointer; font-family: inherit;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.side-quote-arrow:hover { background: rgba(255,255,255,0.18); }
 .side-avatar {
   width: 40px; height: 40px; border-radius: 50%;
   background: rgba(255,255,255,0.15);
@@ -475,7 +500,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       <div class="side-tagline">Give Wings To Your Dreams</div>
     </div>
     <div class="side-quote">
-      <div class="side-quote-inner" id="sideQuoteInner">
+      <div class="side-quote-inner" id="sideQuoteInner" onclick="nextTestimonial(true)">
         <div class="side-quote-mark">&ldquo;</div>
         <div class="side-quote-text" id="sideQuoteText"></div>
         <div class="side-quote-author">
@@ -485,7 +510,15 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
             <div class="side-author-role" id="sideAuthorRole"></div>
           </div>
         </div>
+      </div>
+      <div class="side-quote-nav">
+        <button class="side-quote-arrow" onclick="event.stopPropagation(); prevTestimonial(true)" aria-label="Previous testimonial">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <div class="side-quote-dots" id="sideQuoteDots"></div>
+        <button class="side-quote-arrow" onclick="event.stopPropagation(); nextTestimonial(true)" aria-label="Next testimonial">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M6 12l4-4-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
     </div>
     <div class="side-footer">
@@ -520,7 +553,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       <div style="font-size: 14px; font-weight: 600; color: var(--brand-text); margin-bottom: 4px;">✓ Plan request received</div>
       <div style="font-size: 13px; color: var(--ink-2); line-height: 1.5;">Thanks for submitting your goals. Let's also book a quick call with our team to walk you through the plan.</div>
     </div>
-    <div class="mobile-quote" id="mobileQuote">
+    <div class="mobile-quote" id="mobileQuote" onclick="nextTestimonial(true)">
       <div class="mobile-quote-text" id="mobileQuoteText"></div>
       <div class="mobile-quote-author">
         <div class="mobile-avatar" id="mobileAvatar"></div>
@@ -529,6 +562,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
           <div class="mobile-author-stars">★★★★★</div>
         </div>
       </div>
+      <div class="mobile-quote-nav" id="mobileQuoteDots"></div>
     </div>
     <h1 id="mobTitle">Book an appointment</h1>
     <p class="sub" id="mobSub">Enter your mobile number to get started.</p>
@@ -1024,20 +1058,87 @@ var testimonialIdx = 0;
 var testimonialInterval = null;
 
 function initTestimonials() {
-  if (!document.getElementById('sideQuoteText')) return;
-  // Render the dots once
-  var dotsHtml = TESTIMONIALS.map(function(_, i) {
-    return '<span class="side-dot" data-idx="' + i + '"></span>';
-  }).join('');
-  document.getElementById('sideQuoteDots').innerHTML = dotsHtml;
+  if (!document.getElementById('sideQuoteText') && !document.getElementById('mobileQuoteText')) return;
+  // Render the clickable dots once (desktop sidebar)
+  var sideDots = document.getElementById('sideQuoteDots');
+  if (sideDots) {
+    sideDots.innerHTML = TESTIMONIALS.map(function(_, i) {
+      return '<button class="side-dot" data-idx="' + i + '" onclick="event.stopPropagation(); goToTestimonial(' + i + ')" aria-label="Go to testimonial ' + (i+1) + '"></button>';
+    }).join('');
+  }
+  // Render mobile dots
+  var mobileDots = document.getElementById('mobileQuoteDots');
+  if (mobileDots) {
+    mobileDots.innerHTML = TESTIMONIALS.map(function(_, i) {
+      return '<button class="mobile-dot" data-idx="' + i + '" onclick="event.stopPropagation(); goToTestimonial(' + i + ')" aria-label="Go to testimonial ' + (i+1) + '"></button>';
+    }).join('');
+  }
   // Random starting index so different users see different first quotes
   testimonialIdx = Math.floor(Math.random() * TESTIMONIALS.length);
   renderTestimonial(testimonialIdx, false);
-  // Advance every 6 seconds
+  startAutoRotation();
+  wireMobileSwipe();
+}
+
+function startAutoRotation() {
+  clearInterval(testimonialInterval);
   testimonialInterval = setInterval(function() {
     testimonialIdx = (testimonialIdx + 1) % TESTIMONIALS.length;
     renderTestimonial(testimonialIdx, true);
   }, 6000);
+}
+
+function pauseAutoRotation() {
+  // Pause auto-rotation for 12 seconds after a manual interaction
+  clearInterval(testimonialInterval);
+  setTimeout(startAutoRotation, 12000);
+}
+
+function goToTestimonial(i) {
+  testimonialIdx = i;
+  renderTestimonial(testimonialIdx, true);
+  pauseAutoRotation();
+}
+
+function nextTestimonial(manual) {
+  testimonialIdx = (testimonialIdx + 1) % TESTIMONIALS.length;
+  renderTestimonial(testimonialIdx, true);
+  if (manual) pauseAutoRotation();
+}
+
+function prevTestimonial(manual) {
+  testimonialIdx = (testimonialIdx - 1 + TESTIMONIALS.length) % TESTIMONIALS.length;
+  renderTestimonial(testimonialIdx, true);
+  if (manual) pauseAutoRotation();
+}
+
+function wireMobileSwipe() {
+  var card = document.getElementById('mobileQuote');
+  if (!card) return;
+  var touchStartX = 0, touchStartY = 0, touchMoved = false;
+  card.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchMoved = false;
+  }, { passive: true });
+  card.addEventListener('touchmove', function(e) {
+    var dx = e.touches[0].clientX - touchStartX;
+    var dy = e.touches[0].clientY - touchStartY;
+    if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) touchMoved = true;
+  }, { passive: true });
+  card.addEventListener('touchend', function(e) {
+    if (!touchMoved) return;
+    var dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) < 40) return;
+    if (dx < 0) nextTestimonial(true);
+    else prevTestimonial(true);
+    // Prevent the card's onclick from firing after a swipe
+    e.preventDefault();
+  });
+  // On click, if the user actually swiped, cancel the click
+  card.addEventListener('click', function(e) {
+    if (touchMoved) { e.stopPropagation(); e.preventDefault(); touchMoved = false; }
+  }, true);
 }
 
 function renderTestimonial(idx, withFade) {
@@ -1058,6 +1159,8 @@ function renderTestimonial(idx, withFade) {
       document.getElementById('mobileQuoteText').textContent = t.text;
       document.getElementById('mobileAvatar').textContent = t.initials;
       document.getElementById('mobileAuthorName').textContent = t.name;
+      var mdots = document.querySelectorAll('#mobileQuoteDots .mobile-dot');
+      mdots.forEach(function(d, i) { d.classList.toggle('active', i === idx); });
     }
   };
   if (withFade) {
