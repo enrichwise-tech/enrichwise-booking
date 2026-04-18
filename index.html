@@ -154,17 +154,6 @@ body {
   width: 18px; border-radius: 3px;
 }
 .side-quote-inner { cursor: pointer; }
-.side-quote-nav {
-  display: flex; gap: 10px; margin-top: 12px; align-items: center;
-}
-.side-quote-arrow {
-  width: 28px; height: 28px; border-radius: 50%;
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-  color: #fff; cursor: pointer; font-family: inherit;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s;
-}
-.side-quote-arrow:hover { background: rgba(255,255,255,0.18); }
 .side-avatar {
   width: 40px; height: 40px; border-radius: 50%;
   background: rgba(255,255,255,0.15);
@@ -511,15 +500,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
           </div>
         </div>
       </div>
-      <div class="side-quote-nav">
-        <button class="side-quote-arrow" onclick="event.stopPropagation(); prevTestimonial(true)" aria-label="Previous testimonial">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="side-quote-dots" id="sideQuoteDots"></div>
-        <button class="side-quote-arrow" onclick="event.stopPropagation(); nextTestimonial(true)" aria-label="Next testimonial">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M6 12l4-4-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </div>
+      <div class="side-quote-dots" id="sideQuoteDots"></div>
     </div>
     <div class="side-footer">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1L2 3.5v4c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5v-4L8 1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
