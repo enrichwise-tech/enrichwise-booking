@@ -93,10 +93,23 @@ export async function upsertFunnelLead(info = {}) {
   } else if (!existing) {
     fields.Last_Name = 'Lead';
   }
-  if (info.email) fields.Email = info.email;
+  // Email handling:
+  //   - NEW Lead  → set Email (primary)
+  //   - EXISTING Lead → set Secondary_Email, so we don't overwrite the primary
+  //     Email the team may already have curated.
+  if (info.email) {
+    if (existing) fields.Secondary_Email = info.email;
+    else          fields.Email = info.email;
+  }
+
   // Store in Mobile field only, digits-only format (e.g. "918793420024")
   fields.Mobile = mobileDigits;
-  fields.Lead_Source = 'Enrichwise Booking App';
+
+  // Lead_Source written only on create. On update we don't overwrite whatever
+  // source the team / other systems have set.
+  if (!existing) {
+    fields.Lead_Source = 'Enrichwise Booking App';
+  }
 
   // Lead_Status mapping — must match your Zoho CRM Lead_Status picklist values exactly.
   if (stage === 'booking_created') {
