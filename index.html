@@ -213,8 +213,34 @@ body {
 .shell {
   width: 100%;
   max-width: 460px;
-  padding: 40px 32px 60px;
+  padding: 40px 32px 40px;
   margin: 0 auto;
+  flex: 1;
+}
+.main { display: flex; flex-direction: column; }
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding: 18px 32px 24px;
+  background: #f2f1ee;
+  margin-top: auto;
+}
+.footer-credentials {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  align-items: center; gap: 6px 10px;
+  font-size: 11px; color: var(--ink-2);
+  text-align: center;
+}
+.footer-credential { font-weight: 500; letter-spacing: 0.1px; }
+.footer-sep { color: var(--ink-3); }
+.footer-bottom {
+  text-align: center;
+  font-size: 10px; color: var(--ink-3);
+  margin-top: 6px; letter-spacing: 0.2px;
+}
+@media (max-width: 860px) {
+  .site-footer { padding: 14px 16px 18px; }
+  .footer-credentials { font-size: 10px; gap: 4px 8px; }
+  .footer-sep { display: none; }
 }
 .brand { display: none; }  /* replaced by top bar brand on mobile */
 
@@ -781,6 +807,19 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
   </div>
 
     </div> <!-- /.shell -->
+
+    <footer class="site-footer">
+      <div class="footer-credentials">
+        <span class="footer-credential">Since 2005</span>
+        <span class="footer-sep">·</span>
+        <span class="footer-credential">AMFI Registered Mutual Fund Distributor</span>
+        <span class="footer-sep">·</span>
+        <span class="footer-credential">AMFI Registered SIF Distributor</span>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; Enrichwise Financial Services Pvt Ltd</span>
+      </div>
+    </footer>
   </main>
 </div> <!-- /.page -->
 
