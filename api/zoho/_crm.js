@@ -53,9 +53,9 @@ function ts() {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
 }
 
-export async function findLeadByPhone(fullPhone) {
-  // Zoho CRM search API returns 204 No Content when nothing matches.
-  const criteria = `(Phone:equals:${fullPhone})`;
+export async function findLeadByPhone(mobileDigits) {
+  // Search by Mobile field (digits only, no + prefix)
+  const criteria = `(Mobile:equals:${mobileDigits})`;
   const r = await zohoGetJson(`${CRM_BASE}/Leads/search`, { criteria });
   if (r.status === 204 || !r.ok) return null;
   const leads = r.data?.data || [];
@@ -75,11 +75,13 @@ export async function upsertFunnelLead(info = {}) {
     throw new Error('upsertFunnelLead: mobile and country_code are required');
   }
 
-  const fullPhone = `+${country_code}${mobile}`;
+  // Digits-only international number, e.g. "918793420024" — used as the
+  // Mobile field value and for dedup lookup.
+  const mobileDigits = `${country_code}${mobile}`.replace(/\D/g, '');
   const stageLabel = STAGE_LABEL[stage] || stage || 'Unknown';
   const logLine = `[${ts()}] ${stageLabel}` + (info.note ? ` — ${info.note}` : '');
 
-  const existing = await findLeadByPhone(fullPhone);
+  const existing = await findLeadByPhone(mobileDigits);
 
   // Build the core field set. Only include fields we have data for so we don't
   // overwrite previously-set values with empty strings.
@@ -92,9 +94,8 @@ export async function upsertFunnelLead(info = {}) {
     fields.Last_Name = 'Lead';
   }
   if (info.email) fields.Email = info.email;
-  // Populate both Phone and Mobile — Zoho CRM Leads has separate fields for each
-  fields.Phone = fullPhone;
-  fields.Mobile = fullPhone;
+  // Store in Mobile field only, digits-only format (e.g. "918793420024")
+  fields.Mobile = mobileDigits;
   fields.Lead_Source = 'Enrichwise Booking App';
 
   // Lead_Status mapping — must match your Zoho CRM Lead_Status picklist values exactly.
