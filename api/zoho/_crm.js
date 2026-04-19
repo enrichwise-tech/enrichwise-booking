@@ -92,7 +92,9 @@ export async function upsertFunnelLead(info = {}) {
     fields.Last_Name = 'Lead';
   }
   if (info.email) fields.Email = info.email;
+  // Populate both Phone and Mobile — Zoho CRM Leads has separate fields for each
   fields.Phone = fullPhone;
+  fields.Mobile = fullPhone;
   fields.Lead_Source = 'Enrichwise Booking App';
 
   // Lead_Status mapping — must match your Zoho CRM Lead_Status picklist values exactly.
