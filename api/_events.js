@@ -53,16 +53,31 @@ export async function logEvent(evt) {
     redis.expire(day, 60 * 60 * 24 * 60) // 60-day retention for daily lists
   ]);
 
-  // Per-number funnel state (which stage was the most recent)
+  // Per-number funnel state (which stage was the most recent) + context
   if (record.mobile) {
     const fullNumber = `${record.country_code || ''}${record.mobile}`;
-    await redis.hset(`funnel:${fullNumber}`, {
+    const hash = {
       last_stage: record.type,
       last_ts: String(record.ts),
       country_code: record.country_code || '',
       mobile: record.mobile || ''
-    });
+    };
+    if (record.name)     hash.name = String(record.name);
+    if (record.email)    hash.email = String(record.email);
+    if (record.corpus)   hash.corpus = String(record.corpus);
+    if (record.topics)   hash.topics = Array.isArray(record.topics) ? record.topics.join(', ') : String(record.topics);
+    if (record.mode)     hash.mode = String(record.mode);
+    if (record.platform) hash.platform = String(record.platform);
+    if (record.date)     hash.date = String(record.date);
+    if (record.slot)     hash.slot = String(record.slot);
+
+    await redis.hset(`funnel:${fullNumber}`, hash);
     await redis.expire(`funnel:${fullNumber}`, 60 * 60 * 24 * 30); // 30 days
+
+    // Maintain index set so the cron can enumerate all funnel numbers
+    // (without relying on the capped events:recent list)
+    await redis.sadd('funnel:all', fullNumber);
+    await redis.expire('funnel:all', 60 * 60 * 24 * 35); // 35 days, slightly > hash TTL
   }
 }
 
