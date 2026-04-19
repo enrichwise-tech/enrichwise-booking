@@ -60,10 +60,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body = req.body || {};
-  const { track, date, slot, name, email, mobile, corpus, topics, mode, platform, staff_ids } = body;
+  const { track, date, slot, name, email, mobile, corpus, topics, mode, platform, query, staff_ids } = body;
   const countryCode = String(body.country_code || '91').replace(/\D/g, '') || '91';
 
-  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, country_code: countryCode, topics, mode, platform, staff_ids });
+  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, country_code: countryCode, topics, mode, platform, queryPresent: !!query, staff_ids });
 
   if (!track || !['instant', 'callback'].includes(track)) {
     return res.status(400).json({ error: 'Invalid track' });
@@ -110,6 +110,10 @@ export default async function handler(req, res) {
     "Preferred mode": mode || '',
     "Which platform are you currently using for Investments": platform || ''
   };
+  // Optional free-text query — only include if user typed something
+  if (query && String(query).trim()) {
+    additionalFields["Please describe your query in brief"] = String(query).trim();
+  }
 
   // Try each candidate staff in order. If Zoho says the staff is unavailable
   // (e.g. got booked between slot fetch and book), move on to the next one.

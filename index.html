@@ -946,6 +946,9 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     <label class="field-label">Which platform are you currently using for Investments <span class="req">*</span></label>
     <input class="field" id="fPlatform" type="text" placeholder="e.g. Zerodha, ICICI Direct, none yet" oninput="onDetailsInput()">
 
+    <label class="field-label">Please describe your query in brief <span style="color: var(--ink-3); font-weight: 500;">(optional)</span></label>
+    <textarea class="field" id="fQuery" rows="3" placeholder="Anything specific you'd like to discuss?" oninput="onDetailsInput()" style="resize: vertical; min-height: 70px; font-family: inherit;"></textarea>
+
     <div class="error-msg" id="detailsError">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
       <span id="detailsErrorText">Please fill in all required fields</span>
@@ -1047,6 +1050,7 @@ var state = {
   topics: [],        // multi-select: Investments / Taxation / Insurance
   mode: '',          // single: Normal call / Whatsapp call / Google meet / Zoom call
   platform: '',      // free text
+  query: '',         // optional — free-text query description
   slotDate: '', slotDateIso: '', slotTime: '',
   slotStaffIds: [],  // list of staff IDs available for the picked slot
   fromGbp: false     // true if user arrived back after submitting GBP form
@@ -1646,10 +1650,11 @@ function collectDetails() {
   var name = document.getElementById('fName').value.trim();
   var email = document.getElementById('fEmail').value.trim();
   var platform = document.getElementById('fPlatform').value.trim();
+  var query = (document.getElementById('fQuery').value || '').trim();
   var topics = Array.from(document.querySelectorAll('#s3 .chip input[type="checkbox"]:checked')).map(function(i) { return i.value; });
   var modeEl = document.querySelector('#s3 .chip input[type="radio"][name="mode"]:checked');
   var mode = modeEl ? modeEl.value : '';
-  return { name: name, email: email, topics: topics, mode: mode, platform: platform };
+  return { name: name, email: email, topics: topics, mode: mode, platform: platform, query: query };
 }
 
 function onDetailsInput() {
@@ -1680,6 +1685,7 @@ async function submitDetails() {
   state.topics = d.topics;
   state.mode = d.mode;
   state.platform = d.platform;
+  state.query = d.query;
   trackEvent('details_submitted', { topics: d.topics.join(','), mode: d.mode });
   go('s4');
   loadSlots();
@@ -1836,6 +1842,7 @@ async function bookAppointment() {
         topics:       state.topics,
         mode:         state.mode,
         platform:     state.platform,
+        query:        state.query,
         staff_ids:    state.slotStaffIds
       })
     });
