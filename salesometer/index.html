@@ -66,11 +66,26 @@
 
   /* Main */
   main { padding: 14px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .grid { display: flex; flex-direction: column; gap: 10px; }
+
+  /* Each time slot is one row: time label on the left, cards flow to the right */
+  .time-group {
+    display: flex; align-items: stretch; gap: 14px; min-height: 80px;
+  }
+  .time-label {
+    font-family: var(--mono); font-size: 22px; font-weight: 600;
+    width: 60px; padding: 10px 14px 0 0; color: var(--text);
+    flex-shrink: 0; text-align: right; line-height: 1;
+    border-right: 1px solid var(--border);
+  }
+  .time-cards {
+    display: flex; gap: 8px; flex: 1; flex-wrap: wrap;
+  }
+  .time-cards .card { flex: 0 1 260px; min-width: 240px; max-width: 340px; }
 
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 12px 10px 16px; display: flex; flex-direction: column; gap: 6px;
+    padding: 10px 12px 10px 16px; display: flex; flex-direction: column; gap: 5px;
     position: relative; overflow: hidden; transition: border-color .15s ease;
   }
   .card::before {
@@ -88,8 +103,7 @@
 
   .card.state-done { opacity: 0.5; }
 
-  .row1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .time { font-family: var(--mono); font-size: 22px; font-weight: 600; letter-spacing: 0; line-height: 1; }
+  .row1 { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 18px; }
   .countdown {
     font-family: var(--mono); font-size: 11.5px; font-weight: 500;
     padding: 3px 7px; border-radius: 5px; background: rgba(255,255,255,0.04); color: var(--muted);
@@ -181,14 +195,15 @@
     <span class="last-sync" id="lastSync">—</span>
   </div>
   <div class="stats">
-    <div class="stat" data-filter="" title="Show all"><div class="n" id="statTotal">—</div><div class="l">Today</div></div>
+    <div class="stat" data-filter="all" title="Show everything incl. completed"><div class="n" id="statTotal">—</div><div class="l">Today</div></div>
+    <div class="stat" data-filter="active" title="Show only pending (default)"><div class="n" id="statActive">—</div><div class="l">Pending</div></div>
     <div class="stat red" data-filter="due" title="Show overdue only"><div class="n" id="statDue">—</div><div class="l">Overdue</div></div>
     <div class="stat yellow" data-filter="soon" title="Show next 5 min"><div class="n" id="statSoon">—</div><div class="l">≤5 min</div></div>
     <div class="stat green" data-filter="done" title="Show completed"><div class="n" id="statDone">—</div><div class="l">Done</div></div>
   </div>
   <div class="controls">
     <select id="staffFilter"><option value="">All staff</option></select>
-    <button class="sound-toggle" id="soundBtn" title="Toggle sound">🔇 Muted</button>
+    <button class="sound-toggle on" id="soundBtn" title="Toggle sound">🔊 Sound</button>
     <div class="clock" id="clock">--:--:--</div>
   </div>
 </header>
@@ -215,6 +230,7 @@
     <div id="infoBody"></div>
     <div class="modal-actions">
       <button onclick="closeInfo()">Close</button>
+      <button id="resetBtn" onclick="resetStatus()" style="display:none;background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.35);color:#f5a8a8">↺ Reset status</button>
       <button class="primary" id="crmLink" onclick="openCrm()">Search in Zoho CRM ↗</button>
     </div>
   </div>
@@ -231,7 +247,7 @@
 
   let bookings = [];
   let lastFetch = 0;
-  let soundOn = false; // default muted — rep enables via the 🔇 button
+  let soundOn = true; // default ON — reps can mute via the 🔊 button if needed
   let alarmingIds = new Set();
   let alarmCtx = null;
   let alarmInterval = null;
@@ -296,6 +312,10 @@
   }
 
   // --- State derivation ---
+  // Manual rep click in the sheet always wins. Otherwise time-based:
+  //   - Past start with no click → "due"   (red flashing; rep must click Start/Done/Delay)
+  //   - ≤5 min to start          → "soon"  (yellow)
+  //   - Further away             → "upcoming"
   function deriveState(b) {
     if (b.status === "done") return "done";
     if (b.status === "delayed") return "delayed";
@@ -334,8 +354,10 @@
     return new Date(iso).toTimeString().slice(0, 5);
   }
 
-  // Active state filter from clicking the stat tiles ("" | "due" | "soon" | "done")
-  let stateFilter = "";
+  // Active state filter from clicking the stat tiles.
+  // Values: "" (all), "active" (non-done, DEFAULT), "due", "soon", "done"
+  // Default is "active" — hides completed calls so reps see only what needs attention.
+  let stateFilter = "active";
 
   // --- Render ---
   function render() {
@@ -355,9 +377,14 @@
     });
 
     // Apply state filter for what actually gets displayed in the grid.
-    const list = stateFilter
-      ? staffFiltered.filter(b => deriveState(b) === stateFilter)
-      : staffFiltered;
+    let list;
+    if (stateFilter === "" || stateFilter === "all") {
+      list = staffFiltered;
+    } else if (stateFilter === "active") {
+      list = staffFiltered.filter(b => deriveState(b) !== "done");
+    } else {
+      list = staffFiltered.filter(b => deriveState(b) === stateFilter);
+    }
 
     const main = document.getElementById("content");
     if (list.length === 0) {
@@ -372,20 +399,26 @@
     }
 
     main.className = "grid";
-    main.innerHTML = list.map(b => {
+
+    // Group bookings by start time so same-time calls sit on the same row.
+    const groupMap = new Map();
+    list.forEach(b => {
+      const t = fmtTime(b.start_time);
+      if (!groupMap.has(t)) groupMap.set(t, []);
+      groupMap.get(t).push(b);
+    });
+    const groups = Array.from(groupMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+    const cardHtml = (b) => {
       const state = deriveState(b);
       const medium = detectMedium(b);
-
       const phone = b.customer_contact_no ? `<span class="phone-num">${escapeHtml(b.customer_contact_no)}</span>` : "";
       const note = b.note ? `<div class="note">💬 ${escapeHtml(b.note)}</div>` : "";
-
       const disabledStart = (state === "started" || state === "done") ? "disabled" : "";
-      const disabledDone = (state === "done") ? "disabled" : "";
-
+      const disabledDone  = (state === "done") ? "disabled" : "";
       return `
         <div class="card state-${state}" data-id="${b.booking_id}">
           <div class="row1">
-            <div class="time">${fmtTime(b.start_time)}</div>
             <div class="countdown ${state}" data-countdown="${b.booking_id}">${fmtCountdown(b, state)}</div>
           </div>
           <div class="customer" onclick="openInfo('${b.booking_id}')" title="Click for booking details">${escapeHtml(b.customer_name || "Unknown")}</div>
@@ -398,11 +431,17 @@
           <div class="actions">
             <button class="start" ${disabledStart} onclick="markStatus('${b.booking_id}','started')">▶ Start</button>
             <button class="delay" onclick="openModal('${b.booking_id}','delayed')">⏸ Delay</button>
-            <button class="done" ${disabledDone} onclick="markStatus('${b.booking_id}','done')">✓ Done</button>
+            <button class="done"  ${disabledDone}  onclick="markStatus('${b.booking_id}','done')">✓ Done</button>
           </div>
-        </div>
-      `;
-    }).join("");
+        </div>`;
+    };
+
+    main.innerHTML = groups.map(([time, items]) => `
+      <div class="time-group">
+        <div class="time-label">${time}</div>
+        <div class="time-cards">${items.map(cardHtml).join("")}</div>
+      </div>
+    `).join("");
 
     updateStats(stats);
     syncAlarms(newAlarming);
@@ -416,21 +455,23 @@
   }
 
   window.clearStateFilter = () => {
-    stateFilter = "";
+    stateFilter = "active";
     render();
   };
 
-  // Click the stat tiles to filter the grid by state
+  // Click the stat tiles to filter the grid by state.
+  // Re-clicking the currently-active tile returns to the default "pending" view.
   document.querySelectorAll(".stat").forEach(el => {
     el.addEventListener("click", () => {
-      const f = el.dataset.filter || "";
-      stateFilter = (stateFilter === f) ? "" : f;   // re-clicking the active tile clears
+      const f = el.dataset.filter || "active";
+      stateFilter = (stateFilter === f) ? "active" : f;
       render();
     });
   });
 
   function updateStats(s) {
     document.getElementById("statTotal").textContent = s.total;
+    document.getElementById("statActive").textContent = s.total - s.done;
     document.getElementById("statDue").textContent = s.due;
     document.getElementById("statSoon").textContent = s.soon;
     document.getElementById("statDone").textContent = s.done;
@@ -537,10 +578,20 @@
       if (!data.ok) throw new Error(data.error || "Update failed");
       // optimistic: merge locally
       const b = bookings.find(x => x.booking_id === bookingId);
-      if (b) { b.status = status; if (note) b.note = note; if (status === "started") b.started_at = new Date().toISOString(); }
+      if (b) {
+        if (status === "reset") {
+          // Clear manual state so deriveState falls back to time/Zoho logic
+          b.status = (["completed", "no_show", "cancel"].includes(String(b.booking_status || "").toLowerCase())) ? "done" : "scheduled";
+          b.note = ""; b.started_at = ""; b.done_at = "";
+        } else {
+          b.status = status;
+          if (note) b.note = note;
+          if (status === "started") b.started_at = new Date().toISOString();
+        }
+      }
       alarmingIds.delete(bookingId);
       render();
-      toast(`Marked ${status}`);
+      toast(status === "reset" ? "Status reset" : `Marked ${status}`);
     } catch (e) {
       toast(`Error: ${e.message}`);
     }
@@ -606,9 +657,21 @@
     }
 
     document.getElementById("infoBody").innerHTML = html;
+
+    // Show the "Reset status" button only when there's a sheet-stored manual click
+    // to undo (started / done / delayed). If the card is plain "scheduled" there's
+    // nothing to reset.
+    const hasManual = ["started", "done", "delayed"].includes(b.status);
+    document.getElementById("resetBtn").style.display = hasManual ? "inline-block" : "none";
     document.getElementById("infoModal").classList.add("open");
   };
   window.closeInfo = () => document.getElementById("infoModal").classList.remove("open");
+  window.resetStatus = async () => {
+    if (!infoCtx) return;
+    if (!confirm(`Reset status for ${infoCtx.customer_name}?\n\nThe card will revert to its automatic state (based on time / Zoho status).`)) return;
+    await postStatus(infoCtx.booking_id, "reset", "");
+    closeInfo();
+  };
   window.openCrm = () => {
     if (!infoCtx) return;
     const phoneDigits = (infoCtx.customer_contact_no || "").replace(/\D/g, "");
