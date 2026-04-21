@@ -18,6 +18,7 @@
     --green: #22c55e;
     --yellow: #facc15;
     --red: #ef4444;
+    --orange: #f97316;
     --purple: #a855f7;
     --blue: #3b82f6;
     --grey: #4b5563;
@@ -56,6 +57,7 @@
   .stat.red .n { color: var(--red); }
   .stat.yellow .n { color: var(--yellow); }
   .stat.green .n { color: var(--green); }
+  .stat.orange .n { color: var(--orange); }
 
   .controls { display: flex; align-items: center; gap: 10px; }
   select {
@@ -112,6 +114,8 @@
   .card.state-started::before  { background: var(--blue); }
   .card.state-done::before     { background: var(--grey); }
   .card.state-delayed::before  { background: var(--purple); }
+  .card.state-no_show::before  { background: var(--orange); }
+  .card.state-no_show         { opacity: 0.6; }
 
   .card.state-due { animation: flash 1s infinite; border-color: var(--red); }
   @keyframes flash { 0%,100%{box-shadow: 0 0 0 0 rgba(239,68,68,0)} 50%{box-shadow: 0 0 0 3px rgba(239,68,68,0.45)} }
@@ -129,6 +133,7 @@
   .countdown.started { color: var(--blue);   background: rgba(59,130,246,0.12); }
   .countdown.delayed { color: var(--purple); background: rgba(168,85,247,0.12); }
   .countdown.done    { color: var(--muted); }
+  .countdown.no_show { color: var(--orange); background: rgba(249,115,22,0.12); }
 
   .customer {
     font-size: 14.5px; font-weight: 600; line-height: 1.2; cursor: pointer;
@@ -160,9 +165,10 @@
     font-family: inherit; transition: filter .12s ease;
   }
   .actions button:hover { filter: brightness(1.15); }
-  .actions .start { background: var(--blue); border-color: var(--blue); color: #fff; }
-  .actions .delay { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.35); color: #cfb6ee; }
-  .actions .done  { background: rgba(75,85,99,0.35); border-color: var(--border); }
+  .actions .start   { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .actions .delay   { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.35); color: #cfb6ee; }
+  .actions .noshow  { background: rgba(249,115,22,0.15); border-color: rgba(249,115,22,0.35); color: #f5c69f; }
+  .actions .done    { background: rgba(75,85,99,0.35); border-color: var(--border); }
   .actions button:disabled { opacity: 0.3; cursor: not-allowed; }
 
   .empty, .loading { text-align: center; padding: 60px; color: var(--muted); font-size: 14px; }
@@ -214,6 +220,7 @@
     <div class="stat" data-filter="active" title="Show only pending (default)"><div class="n" id="statActive">—</div><div class="l">Pending</div></div>
     <div class="stat red" data-filter="due" title="Show overdue only"><div class="n" id="statDue">—</div><div class="l">Overdue</div></div>
     <div class="stat yellow" data-filter="soon" title="Show next 5 min"><div class="n" id="statSoon">—</div><div class="l">≤5 min</div></div>
+    <div class="stat orange" data-filter="no_show" title="Show no-shows"><div class="n" id="statNoShow">—</div><div class="l">No-show</div></div>
     <div class="stat green" data-filter="done" title="Show completed"><div class="n" id="statDone">—</div><div class="l">Done</div></div>
   </div>
   <div class="controls">
@@ -333,6 +340,7 @@
   //   - Further away             → "upcoming"
   function deriveState(b) {
     if (b.status === "done") return "done";
+    if (b.status === "no_show") return "no_show";
     if (b.status === "delayed") return "delayed";
     if (b.status === "started") return "started";
     const now = Date.now();
@@ -345,6 +353,7 @@
 
   function fmtCountdown(b, state) {
     if (state === "done") return b.status_source === "zoho" ? "Zoho-done" : "Done";
+    if (state === "no_show") return b.status_source === "zoho" ? "👻 No-show (Zoho)" : "👻 No-show";
     if (state === "started") return b.started_at ? `Started ${timeAgo(b.started_at)}` : "In progress";
     if (state === "delayed") return `Delayed`;
     const now = Date.now();
@@ -382,23 +391,29 @@
 
     // Compute stats from the full staff-filtered list (not state-filtered),
     // so the tile numbers don't collapse when you click one.
-    const stats = { total: staffFiltered.length, due: 0, soon: 0, done: 0 };
+    const stats = { total: staffFiltered.length, due: 0, soon: 0, done: 0, no_show: 0 };
     const newAlarming = new Set();
     staffFiltered.forEach(b => {
       const st = deriveState(b);
       if (st === "due")  { stats.due++; newAlarming.add(b.booking_id); }
       if (st === "soon") stats.soon++;
       if (st === "done") stats.done++;
+      if (st === "no_show") stats.no_show++;
     });
 
     // Apply state filter for what actually gets displayed in the grid.
-    // "active" (default Pending view) hides ONLY cards the rep manually marked Done.
-    // Cards Zoho auto-completed stay visible (as grey cards) so the rep can confirm them.
+    // "active" (default Pending view) hides rep-confirmed terminal states
+    // (done / no_show). Zoho-auto-marked cards stay visible so the rep can
+    // see & confirm them.
     let list;
     if (stateFilter === "" || stateFilter === "all") {
       list = staffFiltered;
     } else if (stateFilter === "active") {
-      list = staffFiltered.filter(b => !(deriveState(b) === "done" && b.status_source === "rep"));
+      list = staffFiltered.filter(b => {
+        const st = deriveState(b);
+        const repTerminal = (st === "done" || st === "no_show") && b.status_source === "rep";
+        return !repTerminal;
+      });
     } else {
       list = staffFiltered.filter(b => deriveState(b) === stateFilter);
     }
@@ -435,8 +450,10 @@
       const medium = detectMedium(b);
       const phone = b.customer_contact_no ? `<span class="phone-num">${escapeHtml(b.customer_contact_no)}</span>` : "";
       const note = b.note ? `<div class="note">💬 ${escapeHtml(b.note)}</div>` : "";
-      const disabledStart = (state === "started" || state === "done") ? "disabled" : "";
-      const disabledDone  = (state === "done") ? "disabled" : "";
+      const terminal = (state === "done" || state === "no_show");
+      const disabledStart  = (state === "started" || terminal) ? "disabled" : "";
+      const disabledNoShow = terminal ? "disabled" : "";
+      const disabledDone   = terminal ? "disabled" : "";
       const timeChip = showTime ? `<div class="time-inline">${fmtTime(b.start_time)}</div>` : "";
       return `
         <div class="card state-${state}" data-id="${b.booking_id}">
@@ -452,9 +469,10 @@
           </div>
           ${note}
           <div class="actions">
-            <button class="start" ${disabledStart} onclick="markStatus('${b.booking_id}','started')">▶ Start</button>
-            <button class="delay" onclick="openModal('${b.booking_id}','delayed')">⏸ Delay</button>
-            <button class="done"  ${disabledDone}  onclick="markStatus('${b.booking_id}','done')">✓ Done</button>
+            <button class="start"  ${disabledStart}  onclick="markStatus('${b.booking_id}','started')" title="Start call">▶</button>
+            <button class="delay"                    onclick="openModal('${b.booking_id}','delayed')" title="Delay / note">⏸</button>
+            <button class="noshow" ${disabledNoShow} onclick="markStatus('${b.booking_id}','no_show')" title="Mark no-show">👻</button>
+            <button class="done"   ${disabledDone}   onclick="markStatus('${b.booking_id}','done')" title="Mark done">✓</button>
           </div>
         </div>`;
     };
@@ -499,9 +517,10 @@
 
   function updateStats(s) {
     document.getElementById("statTotal").textContent = s.total;
-    document.getElementById("statActive").textContent = s.total - s.done;
+    document.getElementById("statActive").textContent = s.total - s.done - s.no_show;
     document.getElementById("statDue").textContent = s.due;
     document.getElementById("statSoon").textContent = s.soon;
+    document.getElementById("statNoShow").textContent = s.no_show;
     document.getElementById("statDone").textContent = s.done;
   }
 
@@ -609,9 +628,11 @@
       if (b) {
         if (status === "reset") {
           // Clear manual state so deriveState falls back to time/Zoho logic
-          const zohoIsDone = ["completed", "no_show", "cancel"].includes(String(b.booking_status || "").toLowerCase());
-          b.status = zohoIsDone ? "done" : "scheduled";
-          b.status_source = zohoIsDone ? "zoho" : "";
+          const zs = String(b.booking_status || "").toLowerCase().trim();
+          const zohoNoShow = ["no show", "no-show", "no_show", "noshow"].includes(zs);
+          const zohoDone   = ["completed", "held", "cancelled", "canceled"].includes(zs);
+          b.status = zohoNoShow ? "no_show" : zohoDone ? "done" : "scheduled";
+          b.status_source = (zohoNoShow || zohoDone) ? "zoho" : "";
           b.note = ""; b.started_at = ""; b.done_at = "";
         } else {
           b.status = status;
