@@ -20,6 +20,14 @@ import { zohoGet } from './_client.js';
 const DEFAULT_INSTANT_SVC = '279048000000733018';
 const DEFAULT_CALLBACK_SVC = '279048000000841186';
 
+const STAFF_POOL = [
+  '279048000000288162',
+  '279048000000371462',
+  '279048000000371472',
+  '279048000000371482',
+  '279048000000655616'
+];
+
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -36,23 +44,50 @@ function isoToZoho(iso) {
   return `${d}-${months[parseInt(mo, 10) - 1]}-${y}`;
 }
 
-async function fetchDayCount(serviceId, dateStr) {
-  // Try service-level first (works for let_customer_select_staff=true services)
-  const r = await zohoGet('/bookings/v1/json/availableslots', {
-    service_id: serviceId,
-    selected_date: dateStr
-  });
-  if (!r.ok) return 0;
-  const rv = r.data?.response?.returnvalue;
+const TIME_PATTERN = /^\d{1,2}:\d{2}\s?(AM|PM)?$/i;
+
+function extractSlots(rv) {
   let raw = [];
   if (Array.isArray(rv?.data)) raw = rv.data;
   else if (Array.isArray(rv?.response)) raw = rv.response;
   else if (Array.isArray(rv)) raw = rv;
-  const timePattern = /^\d{1,2}:\d{2}\s?(AM|PM)?$/i;
   return raw
     .map(s => (typeof s === 'string' ? s.trim() : (s?.time || s?.from_time || '')))
-    .filter(s => timePattern.test(s))
-    .length;
+    .filter(s => TIME_PATTERN.test(s));
+}
+
+async function fetchSlotsServiceLevel(serviceId, dateStr) {
+  const r = await zohoGet('/bookings/v1/json/availableslots', {
+    service_id: serviceId,
+    selected_date: dateStr
+  });
+  if (!r.ok) return [];
+  return extractSlots(r.data?.response?.returnvalue);
+}
+
+async function fetchSlotsForStaff(serviceId, staffId, dateStr) {
+  const r = await zohoGet('/bookings/v1/json/availableslots', {
+    service_id: serviceId,
+    staff_id: staffId,
+    selected_date: dateStr
+  });
+  if (!r.ok) return [];
+  return extractSlots(r.data?.response?.returnvalue);
+}
+
+async function fetchDayCount(serviceId, dateStr) {
+  // Same logic as /api/zoho/slots: service-level first, per-staff union as fallback
+  const serviceLevel = await fetchSlotsServiceLevel(serviceId, dateStr);
+  if (serviceLevel.length > 0) return serviceLevel.length;
+
+  const staffResults = await Promise.all(
+    STAFF_POOL.map(sid => fetchSlotsForStaff(serviceId, sid, dateStr).catch(() => []))
+  );
+  const union = new Set();
+  for (const slots of staffResults) {
+    for (const t of slots) union.add(t);
+  }
+  return union.size;
 }
 
 export default async function handler(req, res) {

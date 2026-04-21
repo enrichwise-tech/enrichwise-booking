@@ -503,6 +503,10 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .cal-day:disabled { color: var(--ink-3); cursor: not-allowed; opacity: 0.4; }
 .cal-day.unavailable { color: var(--ink-3); cursor: not-allowed; opacity: 0.45; text-decoration: line-through; }
 .cal-day.unavailable:hover { background: transparent; border-color: transparent; }
+/* While month availability is being fetched, mark future dates as pending
+   (dimmed, not clickable) so we don't flash "clickable → greyed out" on load */
+.cal-day.pending { color: var(--ink-3); cursor: wait; opacity: 0.35; }
+.cal-day.pending:hover { background: transparent; border-color: transparent; }
 .cal-day.empty { visibility: hidden; cursor: default; }
 .cal-day.today { font-weight: 700; }
 .cal-day.today:not(.sel)::after {
@@ -1781,14 +1785,20 @@ function renderCalendar() {
     var past = dt.getTime() < now.getTime();
     var isToday = dt.getTime() === now.getTime();
     var selected = state.slotDateIso === iso;
-    // If we've fetched month availability, use the count to decide unavailable state
+    // Three states for future dates:
+    //   - past: always disabled
+    //   - count known and 0: unavailable (strikethrough, disabled)
+    //   - count not yet fetched: pending (dim, disabled, cursor: wait)
+    //   - count known and >0: available (normal, clickable)
     var hasCountData = calCounts.hasOwnProperty(iso);
     var unavailable = !past && hasCountData && calCounts[iso] === 0;
+    var pending = !past && !hasCountData;
     var cls = 'cal-day';
     if (isToday) cls += ' today';
     if (selected) cls += ' sel';
     if (unavailable) cls += ' unavailable';
-    var disabled = past || unavailable;
+    else if (pending) cls += ' pending';
+    var disabled = past || unavailable || pending;
     html += '<button class="' + cls + '"'
       + (disabled ? ' disabled' : '')
       + ' data-iso="' + iso + '"'
@@ -1844,11 +1854,13 @@ function renderCalendarOnly() {
     var selected = state.slotDateIso === iso;
     var hasCountData = calCounts.hasOwnProperty(iso);
     var unavailable = !past && hasCountData && calCounts[iso] === 0;
+    var pending = !past && !hasCountData;
     var cls = 'cal-day';
     if (isToday) cls += ' today';
     if (selected) cls += ' sel';
     if (unavailable) cls += ' unavailable';
-    var disabled = past || unavailable;
+    else if (pending) cls += ' pending';
+    var disabled = past || unavailable || pending;
     html += '<button class="' + cls + '"'
       + (disabled ? ' disabled' : '')
       + ' data-iso="' + iso + '"'

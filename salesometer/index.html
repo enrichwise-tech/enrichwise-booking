@@ -329,7 +329,7 @@
   }
 
   function fmtCountdown(b, state) {
-    if (state === "done") return `Done`;
+    if (state === "done") return b.status_source === "zoho" ? "Zoho-done" : "Done";
     if (state === "started") return b.started_at ? `Started ${timeAgo(b.started_at)}` : "In progress";
     if (state === "delayed") return `Delayed`;
     const now = Date.now();
@@ -377,11 +377,13 @@
     });
 
     // Apply state filter for what actually gets displayed in the grid.
+    // "active" (default Pending view) hides ONLY cards the rep manually marked Done.
+    // Cards Zoho auto-completed stay visible (as grey cards) so the rep can confirm them.
     let list;
     if (stateFilter === "" || stateFilter === "all") {
       list = staffFiltered;
     } else if (stateFilter === "active") {
-      list = staffFiltered.filter(b => deriveState(b) !== "done");
+      list = staffFiltered.filter(b => !(deriveState(b) === "done" && b.status_source === "rep"));
     } else {
       list = staffFiltered.filter(b => deriveState(b) === stateFilter);
     }
@@ -581,10 +583,13 @@
       if (b) {
         if (status === "reset") {
           // Clear manual state so deriveState falls back to time/Zoho logic
-          b.status = (["completed", "no_show", "cancel"].includes(String(b.booking_status || "").toLowerCase())) ? "done" : "scheduled";
+          const zohoIsDone = ["completed", "no_show", "cancel"].includes(String(b.booking_status || "").toLowerCase());
+          b.status = zohoIsDone ? "done" : "scheduled";
+          b.status_source = zohoIsDone ? "zoho" : "";
           b.note = ""; b.started_at = ""; b.done_at = "";
         } else {
           b.status = status;
+          b.status_source = "rep";
           if (note) b.note = note;
           if (status === "started") b.started_at = new Date().toISOString();
         }
