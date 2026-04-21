@@ -501,6 +501,8 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .cal-day:hover:not(:disabled):not(.sel) { background: var(--brand-light); border-color: var(--brand-light); }
 .cal-day.sel { background: var(--brand); color: #fff; font-weight: 600; }
 .cal-day:disabled { color: var(--ink-3); cursor: not-allowed; opacity: 0.4; }
+.cal-day.unavailable { color: var(--ink-3); cursor: not-allowed; opacity: 0.45; text-decoration: line-through; }
+.cal-day.unavailable:hover { background: transparent; border-color: transparent; }
 .cal-day.empty { visibility: hidden; cursor: default; }
 .cal-day.today { font-weight: 700; }
 .cal-day.today:not(.sel)::after {
@@ -1735,6 +1737,8 @@ async function submitDetails() {
 /* ── Step 5: Calendar + slot picker ── */
 var calView = null; // { year, month }  (month 0-indexed)
 var calMonthsAhead = 2; // how far forward user can navigate from current month
+var calCounts = {};    // { "2026-05-13": 0, "2026-05-14": 12, ... } populated by month-slots API
+var calCountsLoading = {}; // { "2026-5": true } to prevent duplicate fetches per month
 
 function loadSlots() {
   state.slotDate = ''; state.slotDateIso = ''; state.slotTime = ''; state.slotStaffIds = [];
@@ -1777,11 +1781,76 @@ function renderCalendar() {
     var past = dt.getTime() < now.getTime();
     var isToday = dt.getTime() === now.getTime();
     var selected = state.slotDateIso === iso;
+    // If we've fetched month availability, use the count to decide unavailable state
+    var hasCountData = calCounts.hasOwnProperty(iso);
+    var unavailable = !past && hasCountData && calCounts[iso] === 0;
     var cls = 'cal-day';
     if (isToday) cls += ' today';
     if (selected) cls += ' sel';
+    if (unavailable) cls += ' unavailable';
+    var disabled = past || unavailable;
     html += '<button class="' + cls + '"'
-      + (past ? ' disabled' : '')
+      + (disabled ? ' disabled' : '')
+      + ' data-iso="' + iso + '"'
+      + ' onclick="selectDate(\'' + iso + '\')">' + d + '</button>';
+  }
+  grid.innerHTML = html;
+
+  // Fire off month availability fetch in the background
+  loadMonthCounts(calView.year, calView.month);
+}
+
+async function loadMonthCounts(year, month0) {
+  var key = year + '-' + (month0 + 1);
+  if (calCountsLoading[key]) return; // already in flight
+  calCountsLoading[key] = true;
+  try {
+    var url = API_BASE + '/api/zoho/month-slots?track=' + encodeURIComponent(state.track || 'instant')
+      + '&year=' + year + '&month=' + (month0 + 1);
+    var res = await fetch(url);
+    var data = await res.json();
+    if (data && data.ok && data.counts) {
+      // Merge into master cache (so navigating back and forth doesn't re-fetch)
+      Object.keys(data.counts).forEach(function(iso) {
+        calCounts[iso] = data.counts[iso];
+      });
+      // Re-render only if we're still on the same month
+      if (calView && calView.year === year && calView.month === month0) {
+        renderCalendarOnly();
+      }
+    }
+  } catch (err) {
+    console.warn('[calendar] month-slots fetch failed:', err.message);
+  }
+  calCountsLoading[key] = false;
+}
+
+// Re-render calendar grid WITHOUT firing month-counts fetch (used after counts load)
+function renderCalendarOnly() {
+  var grid = document.getElementById('calGrid');
+  if (!grid) return;
+  var now = new Date(); now.setHours(0,0,0,0);
+  var firstDay = new Date(calView.year, calView.month, 1);
+  var firstDow = (firstDay.getDay() + 6) % 7;
+  var daysInMonth = new Date(calView.year, calView.month + 1, 0).getDate();
+  var html = '';
+  for (var i = 0; i < firstDow; i++) html += '<div class="cal-day empty"></div>';
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dt = new Date(calView.year, calView.month, d);
+    dt.setHours(0,0,0,0);
+    var iso = calView.year + '-' + pad2(calView.month + 1) + '-' + pad2(d);
+    var past = dt.getTime() < now.getTime();
+    var isToday = dt.getTime() === now.getTime();
+    var selected = state.slotDateIso === iso;
+    var hasCountData = calCounts.hasOwnProperty(iso);
+    var unavailable = !past && hasCountData && calCounts[iso] === 0;
+    var cls = 'cal-day';
+    if (isToday) cls += ' today';
+    if (selected) cls += ' sel';
+    if (unavailable) cls += ' unavailable';
+    var disabled = past || unavailable;
+    html += '<button class="' + cls + '"'
+      + (disabled ? ' disabled' : '')
       + ' data-iso="' + iso + '"'
       + ' onclick="selectDate(\'' + iso + '\')">' + d + '</button>';
   }
