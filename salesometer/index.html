@@ -44,7 +44,13 @@
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
   .stats { display: flex; gap: 10px; align-items: center; }
-  .stat { background: var(--panel-2); border: 1px solid var(--border); padding: 6px 12px; border-radius: 8px; min-width: 64px; text-align: center; }
+  .stat {
+    background: var(--panel-2); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 8px; min-width: 64px; text-align: center;
+    cursor: pointer; user-select: none; transition: border-color .12s ease, background .12s ease;
+  }
+  .stat:hover { border-color: var(--blue); }
+  .stat.active { border-color: var(--blue); background: rgba(59,130,246,0.1); box-shadow: 0 0 0 1px var(--blue) inset; }
   .stat .n { font-family: var(--mono); font-size: 18px; font-weight: 600; line-height: 1; }
   .stat .l { font-size: 9.5px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 500; }
   .stat.red .n { color: var(--red); }
@@ -175,10 +181,10 @@
     <span class="last-sync" id="lastSync">—</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="n" id="statTotal">—</div><div class="l">Today</div></div>
-    <div class="stat red"><div class="n" id="statDue">—</div><div class="l">Overdue</div></div>
-    <div class="stat yellow"><div class="n" id="statSoon">—</div><div class="l">≤5 min</div></div>
-    <div class="stat green"><div class="n" id="statDone">—</div><div class="l">Done</div></div>
+    <div class="stat" data-filter="" title="Show all"><div class="n" id="statTotal">—</div><div class="l">Today</div></div>
+    <div class="stat red" data-filter="due" title="Show overdue only"><div class="n" id="statDue">—</div><div class="l">Overdue</div></div>
+    <div class="stat yellow" data-filter="soon" title="Show next 5 min"><div class="n" id="statSoon">—</div><div class="l">≤5 min</div></div>
+    <div class="stat green" data-filter="done" title="Show completed"><div class="n" id="statDone">—</div><div class="l">Done</div></div>
   </div>
   <div class="controls">
     <select id="staffFilter"><option value="">All staff</option></select>
@@ -328,21 +334,40 @@
     return new Date(iso).toTimeString().slice(0, 5);
   }
 
+  // Active state filter from clicking the stat tiles ("" | "due" | "soon" | "done")
+  let stateFilter = "";
+
   // --- Render ---
   function render() {
     const filter = document.getElementById("staffFilter").value;
-    const list = filter ? bookings.filter(b => b.staff_name === filter) : bookings;
-    list.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    const staffFiltered = filter ? bookings.filter(b => b.staff_name === filter) : bookings;
+    staffFiltered.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
 
-    const stats = { total: list.length, due: 0, soon: 0, done: 0 };
+    // Compute stats from the full staff-filtered list (not state-filtered),
+    // so the tile numbers don't collapse when you click one.
+    const stats = { total: staffFiltered.length, due: 0, soon: 0, done: 0 };
     const newAlarming = new Set();
+    staffFiltered.forEach(b => {
+      const st = deriveState(b);
+      if (st === "due")  { stats.due++; newAlarming.add(b.booking_id); }
+      if (st === "soon") stats.soon++;
+      if (st === "done") stats.done++;
+    });
+
+    // Apply state filter for what actually gets displayed in the grid.
+    const list = stateFilter
+      ? staffFiltered.filter(b => deriveState(b) === stateFilter)
+      : staffFiltered;
 
     const main = document.getElementById("content");
     if (list.length === 0) {
       main.className = "empty";
-      main.innerHTML = "No appointments scheduled for today.";
+      main.innerHTML = stateFilter
+        ? `No appointments match “${stateFilter}”. <a href="#" onclick="clearStateFilter();return false" style="color:var(--blue)">Show all</a>`
+        : "No appointments scheduled for today.";
       updateStats(stats);
       syncAlarms(newAlarming);
+      updateStatActive();
       return;
     }
 
@@ -350,9 +375,6 @@
     main.innerHTML = list.map(b => {
       const state = deriveState(b);
       const medium = detectMedium(b);
-      if (state === "due") { stats.due++; newAlarming.add(b.booking_id); }
-      if (state === "soon") stats.soon++;
-      if (state === "done") stats.done++;
 
       const phone = b.customer_contact_no ? `<span class="phone-num">${escapeHtml(b.customer_contact_no)}</span>` : "";
       const note = b.note ? `<div class="note">💬 ${escapeHtml(b.note)}</div>` : "";
@@ -384,7 +406,28 @@
 
     updateStats(stats);
     syncAlarms(newAlarming);
+    updateStatActive();
   }
+
+  function updateStatActive() {
+    document.querySelectorAll(".stat").forEach(el => {
+      el.classList.toggle("active", el.dataset.filter === stateFilter);
+    });
+  }
+
+  window.clearStateFilter = () => {
+    stateFilter = "";
+    render();
+  };
+
+  // Click the stat tiles to filter the grid by state
+  document.querySelectorAll(".stat").forEach(el => {
+    el.addEventListener("click", () => {
+      const f = el.dataset.filter || "";
+      stateFilter = (stateFilter === f) ? "" : f;   // re-clicking the active tile clears
+      render();
+    });
+  });
 
   function updateStats(s) {
     document.getElementById("statTotal").textContent = s.total;
@@ -466,7 +509,13 @@
       }
     } catch (e) {
       document.getElementById("content").className = "empty";
-      document.getElementById("content").innerHTML = `❌ Failed to load: ${escapeHtml(e.message)}<br><small>Check BACKEND_URL in index.html</small>`;
+      document.getElementById("content").innerHTML = `
+        ❌ Failed to load: ${escapeHtml(e.message)}<br>
+        <div style="margin-top:14px;font-size:12.5px;color:var(--muted);line-height:1.6">
+          If this keeps happening on office Wi-Fi, it's usually a DNS cache issue.<br>
+          <a href="flushdns.bat" download style="color:var(--blue);text-decoration:none">Download DNS fix ↓</a>
+          — then right-click the file → <b>Run as administrator</b> → reload the page.
+        </div>`;
     }
   }
   setInterval(fetchBookings, REFRESH_MS);
@@ -642,6 +691,11 @@
                   style="width:100%;padding:10px;margin-top:12px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-family:inherit;font-size:13.5px">
             Unlock
           </button>
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.5">
+            🛠 <b>Can't load the site sometimes?</b> Save this file to your Desktop
+            &nbsp;·&nbsp; <a href="flushdns.bat" download style="color:var(--blue);text-decoration:none">Download DNS fix ↓</a><br>
+            Right-click → <b>Run as administrator</b> when the site fails to load.
+          </div>
         </div>`;
       document.body.appendChild(overlay);
       const input = overlay.querySelector("#__pwd");
