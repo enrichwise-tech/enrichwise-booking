@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Salesometer — Enrichwise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #131a26;
+    --panel-2: #1a2332;
+    --border: #2a3650;
+    --text: #e7ecf5;
+    --muted: #7f8ba4;
+    --green: #22c55e;
+    --yellow: #facc15;
+    --red: #ef4444;
+    --purple: #a855f7;
+    --blue: #3b82f6;
+    --grey: #4b5563;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  body { min-height: 100vh; }
+
+  /* Top bar */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 18px; background: var(--panel);
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: 1.2px; }
+  .brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .stats { display: flex; gap: 10px; align-items: center; }
+  .stat { background: var(--panel-2); border: 1px solid var(--border); padding: 6px 12px; border-radius: 8px; min-width: 64px; text-align: center; }
+  .stat .n { font-family: var(--mono); font-size: 18px; font-weight: 600; line-height: 1; }
+  .stat .l { font-size: 9.5px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 500; }
+  .stat.red .n { color: var(--red); }
+  .stat.yellow .n { color: var(--yellow); }
+  .stat.green .n { color: var(--green); }
+
+  .controls { display: flex; align-items: center; gap: 10px; }
+  select {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: 7px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+  }
+  .clock { font-family: var(--mono); font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }
+
+  /* Main */
+  main { padding: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px 10px 16px; display: flex; flex-direction: column; gap: 6px;
+    position: relative; overflow: hidden; transition: border-color .15s ease;
+  }
+  .card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--grey);
+  }
+  .card.state-upcoming::before { background: var(--green); }
+  .card.state-soon::before     { background: var(--yellow); }
+  .card.state-due::before      { background: var(--red); }
+  .card.state-started::before  { background: var(--blue); }
+  .card.state-done::before     { background: var(--grey); }
+  .card.state-delayed::before  { background: var(--purple); }
+
+  .card.state-due { animation: flash 1s infinite; border-color: var(--red); }
+  @keyframes flash { 0%,100%{box-shadow: 0 0 0 0 rgba(239,68,68,0)} 50%{box-shadow: 0 0 0 3px rgba(239,68,68,0.45)} }
+
+  .card.state-done { opacity: 0.5; }
+
+  .row1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .time { font-family: var(--mono); font-size: 22px; font-weight: 600; letter-spacing: 0; line-height: 1; }
+  .countdown {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 500;
+    padding: 3px 7px; border-radius: 5px; background: rgba(255,255,255,0.04); color: var(--muted);
+    white-space: nowrap;
+  }
+  .countdown.soon    { color: var(--yellow); background: rgba(250,204,21,0.1); }
+  .countdown.due     { color: var(--red);    background: rgba(239,68,68,0.15); font-weight: 600; }
+  .countdown.started { color: var(--blue);   background: rgba(59,130,246,0.12); }
+  .countdown.delayed { color: var(--purple); background: rgba(168,85,247,0.12); }
+  .countdown.done    { color: var(--muted); }
+
+  .customer {
+    font-size: 14.5px; font-weight: 600; line-height: 1.2; cursor: pointer;
+    display: inline-block; width: fit-content;
+    border-bottom: 1px dashed transparent; padding-bottom: 1px;
+  }
+  .customer:hover { border-bottom-color: var(--blue); color: #fff; }
+  .meta {
+    display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11.5px;
+    flex-wrap: wrap; line-height: 1.3;
+  }
+  .meta .medium {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--text); font-weight: 500;
+  }
+  .meta .dot-sep { opacity: 0.5; }
+  .meta .phone-num { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .meta .staff { color: var(--text); }
+
+  .note {
+    background: rgba(168,85,247,0.08); border-left: 2px solid var(--purple);
+    padding: 4px 8px; font-size: 11.5px; border-radius: 3px; color: #d0bdec;
+  }
+
+  .actions { display: flex; gap: 5px; margin-top: 2px; }
+  .actions button {
+    flex: 1; padding: 6px 6px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 11.5px; font-weight: 500; cursor: pointer;
+    font-family: inherit; transition: filter .12s ease;
+  }
+  .actions button:hover { filter: brightness(1.15); }
+  .actions .start { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .actions .delay { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.35); color: #cfb6ee; }
+  .actions .done  { background: rgba(75,85,99,0.35); border-color: var(--border); }
+  .actions button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .empty, .loading { text-align: center; padding: 60px; color: var(--muted); font-size: 14px; }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; width: 400px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+  .modal.wide { width: 480px; }
+  .modal h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+  .modal .sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+  .modal dl { margin: 0; display: grid; grid-template-columns: 110px 1fr; gap: 6px 10px; font-size: 12.5px; }
+  .modal dt { color: var(--muted); font-weight: 500; }
+  .modal dd { margin: 0; color: var(--text); word-break: break-word; }
+  .modal dd a { color: var(--blue); text-decoration: none; }
+  .modal dd a:hover { text-decoration: underline; }
+  .modal .section-title { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin: 14px 0 6px; font-weight: 600; }
+  .modal .empty-info { color: var(--muted); font-size: 12px; font-style: italic; }
+  .modal textarea {
+    width: 100%; min-height: 80px; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: inherit; font-size: 13px; resize: vertical;
+  }
+  .modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .modal button { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer; font-weight: 500; font-family: inherit; font-size: 12.5px; }
+  .modal button.primary { background: var(--purple); border-color: var(--purple); color: #fff; }
+
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--border); padding: 8px 14px; border-radius: 6px; color: var(--text); opacity: 0; transition: opacity .2s; z-index: 200; font-size: 12.5px; }
+  .toast.show { opacity: 1; }
+
+  .last-sync { font-size: 10.5px; color: var(--muted); margin-left: 6px; font-family: var(--mono); }
+  .sound-toggle {
+    background: transparent; border: 1px solid var(--border);
+    padding: 5px 9px; border-radius: 7px; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px;
+  }
+  .sound-toggle.on { color: var(--green); border-color: rgba(34,197,94,0.4); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="dot"></div>
+    <h1>SALESOMETER</h1>
+    <span class="last-sync" id="lastSync">—</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="n" id="statTotal">—</div><div class="l">Today</div></div>
+    <div class="stat red"><div class="n" id="statDue">—</div><div class="l">Overdue</div></div>
+    <div class="stat yellow"><div class="n" id="statSoon">—</div><div class="l">≤5 min</div></div>
+    <div class="stat green"><div class="n" id="statDone">—</div><div class="l">Done</div></div>
+  </div>
+  <div class="controls">
+    <select id="staffFilter"><option value="">All staff</option></select>
+    <button class="sound-toggle" id="soundBtn" title="Toggle sound">🔇 Muted</button>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main>
+  <div id="content" class="loading">Loading appointments…</div>
+</main>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <h3 id="modalTitle">Add note</h3>
+    <textarea id="modalText" placeholder="E.g. Client is delayed by 10 min, will call back"></textarea>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="primary" onclick="submitModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="infoModal">
+  <div class="modal wide">
+    <h3 id="infoName">—</h3>
+    <div class="sub" id="infoSub">—</div>
+    <div id="infoBody"></div>
+    <div class="modal-actions">
+      <button onclick="closeInfo()">Close</button>
+      <button class="primary" id="crmLink" onclick="openCrm()">Search in Zoho CRM ↗</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ====== CONFIG ======
+  const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwEHwd6zKT4bVBZCFxeep8K4zdpj1AsznaCuE0O1c0c4GIa8WHuZ7TJWqXNaxNqOd2-kw/exec";
+  const REFRESH_MS = 30_000;   // re-fetch backend every 30s
+  const TICK_MS = 1_000;       // tick timers every 1s
+  // ====================
+
+  let bookings = [];
+  let lastFetch = 0;
+  let soundOn = false; // default muted — rep enables via the 🔇 button
+  let alarmingIds = new Set();
+  let alarmCtx = null;
+  let alarmInterval = null;
+  let modalCtx = { bookingId: null, action: null };
+  let initialLoadDone = false; // skip alarm for bookings that were already due at page load
+
+  // --- Audio (Web Audio API) ---
+  function ensureAudio() {
+    if (!alarmCtx) alarmCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (alarmCtx.state === "suspended") alarmCtx.resume();
+  }
+  function beep(freq = 660, duration = 180, type = "sine", gain = 0.18) {
+    if (!soundOn) return;
+    ensureAudio();
+    const o = alarmCtx.createOscillator();
+    const g = alarmCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(gain, alarmCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, alarmCtx.currentTime + duration / 1000);
+    o.connect(g).connect(alarmCtx.destination);
+    o.start(); o.stop(alarmCtx.currentTime + duration / 1000);
+  }
+  function chimeSoon() { beep(880, 140); setTimeout(() => beep(1100, 140), 160); }
+  function alarmLoop() {
+    if (!alarmInterval) {
+      alarmInterval = setInterval(() => {
+        if (alarmingIds.size === 0) { clearInterval(alarmInterval); alarmInterval = null; return; }
+        beep(740, 220, "square", 0.22);
+        setTimeout(() => beep(540, 260, "square", 0.22), 260);
+      }, 1400);
+    }
+  }
+
+  // --- Clock ---
+  function tickClock() {
+    const d = new Date();
+    document.getElementById("clock").textContent = d.toTimeString().slice(0, 8);
+  }
+  setInterval(tickClock, 1000); tickClock();
+
+  // --- Medium detection ---
+  // Uses the real "Preferred mode" custom field from Zoho Bookings
+  // (Normal call / Whatsapp call / Google meet / Zoom call). Falls back to
+  // service name keywords if the field is blank.
+  function detectMedium(b) {
+    const mode = String(b.preferred_mode || "").toLowerCase().trim();
+    if (mode) {
+      if (/whatsapp/.test(mode))          return { icon: "💬", label: "WhatsApp" };
+      if (/zoom/.test(mode))              return { icon: "🎥", label: "Zoom" };
+      if (/meet|google/.test(mode))       return { icon: "💻", label: "Google Meet" };
+      if (/normal|phone|call|tele/.test(mode)) return { icon: "📞", label: "Phone" };
+      // Unknown but present — show the raw mode so nothing is hidden
+      return { icon: "📅", label: b.preferred_mode };
+    }
+    // Fallback for legacy bookings with no preferred_mode set
+    const s = ((b.service_name || "") + " " + (b.notes || "")).toLowerCase();
+    if (b.meeting_link || /zoom/.test(s))   return { icon: "🎥", label: "Zoom" };
+    if (/meet|google/.test(s))              return { icon: "💻", label: "Google Meet" };
+    if (/whatsapp|wa /.test(s))             return { icon: "💬", label: "WhatsApp" };
+    if (/office|in.?person|visit/.test(s))  return { icon: "🏢", label: "In-Person" };
+    return { icon: "📞", label: "Phone" };
+  }
+
+  // --- State derivation ---
+  function deriveState(b) {
+    if (b.status === "done") return "done";
+    if (b.status === "delayed") return "delayed";
+    if (b.status === "started") return "started";
+    const now = Date.now();
+    const start = new Date(b.start_time).getTime();
+    const diffMin = (start - now) / 60000;
+    if (diffMin <= 0) return "due";
+    if (diffMin <= 5) return "soon";
+    return "upcoming";
+  }
+
+  function fmtCountdown(b, state) {
+    if (state === "done") return `Done`;
+    if (state === "started") return b.started_at ? `Started ${timeAgo(b.started_at)}` : "In progress";
+    if (state === "delayed") return `Delayed`;
+    const now = Date.now();
+    const start = new Date(b.start_time).getTime();
+    const diffSec = Math.round((start - now) / 1000);
+    const abs = Math.abs(diffSec);
+    const m = Math.floor(abs / 60);
+    const s = abs % 60;
+    const mmss = `${m}m ${String(s).padStart(2, "0")}s`;
+    if (diffSec <= 0) return `OVERDUE ${mmss}`;
+    if (diffSec <= 300) return `in ${mmss}`;
+    return `in ${m} min`;
+  }
+
+  function timeAgo(iso) {
+    const diff = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    return `${Math.floor(diff / 60)}m ago`;
+  }
+
+  function fmtTime(iso) {
+    return new Date(iso).toTimeString().slice(0, 5);
+  }
+
+  // --- Render ---
+  function render() {
+    const filter = document.getElementById("staffFilter").value;
+    const list = filter ? bookings.filter(b => b.staff_name === filter) : bookings;
+    list.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+
+    const stats = { total: list.length, due: 0, soon: 0, done: 0 };
+    const newAlarming = new Set();
+
+    const main = document.getElementById("content");
+    if (list.length === 0) {
+      main.className = "empty";
+      main.innerHTML = "No appointments scheduled for today.";
+      updateStats(stats);
+      syncAlarms(newAlarming);
+      return;
+    }
+
+    main.className = "grid";
+    main.innerHTML = list.map(b => {
+      const state = deriveState(b);
+      const medium = detectMedium(b);
+      if (state === "due") { stats.due++; newAlarming.add(b.booking_id); }
+      if (state === "soon") stats.soon++;
+      if (state === "done") stats.done++;
+
+      const phone = b.customer_contact_no ? `<span class="phone-num">${escapeHtml(b.customer_contact_no)}</span>` : "";
+      const note = b.note ? `<div class="note">💬 ${escapeHtml(b.note)}</div>` : "";
+
+      const disabledStart = (state === "started" || state === "done") ? "disabled" : "";
+      const disabledDone = (state === "done") ? "disabled" : "";
+
+      return `
+        <div class="card state-${state}" data-id="${b.booking_id}">
+          <div class="row1">
+            <div class="time">${fmtTime(b.start_time)}</div>
+            <div class="countdown ${state}" data-countdown="${b.booking_id}">${fmtCountdown(b, state)}</div>
+          </div>
+          <div class="customer" onclick="openInfo('${b.booking_id}')" title="Click for booking details">${escapeHtml(b.customer_name || "Unknown")}</div>
+          <div class="meta">
+            <span class="medium">${medium.icon} ${medium.label}</span>
+            ${phone}
+            <span class="staff">👤 ${escapeHtml(b.staff_name || "—")}</span>
+          </div>
+          ${note}
+          <div class="actions">
+            <button class="start" ${disabledStart} onclick="markStatus('${b.booking_id}','started')">▶ Start</button>
+            <button class="delay" onclick="openModal('${b.booking_id}','delayed')">⏸ Delay</button>
+            <button class="done" ${disabledDone} onclick="markStatus('${b.booking_id}','done')">✓ Done</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    updateStats(stats);
+    syncAlarms(newAlarming);
+  }
+
+  function updateStats(s) {
+    document.getElementById("statTotal").textContent = s.total;
+    document.getElementById("statDue").textContent = s.due;
+    document.getElementById("statSoon").textContent = s.soon;
+    document.getElementById("statDone").textContent = s.done;
+  }
+
+  function syncAlarms(newSet) {
+    // chime for newly-soon (yellow) — handled by countdown tick
+    const nowAlarming = alarmingIds;
+    for (const id of newSet) if (!nowAlarming.has(id)) {} // newly due is fine, alarm loop handles sound
+    alarmingIds = newSet;
+    if (alarmingIds.size > 0) alarmLoop();
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // --- Tick countdowns every second without re-rendering whole grid ---
+  let prevStates = new Map();
+  function tickCountdowns() {
+    bookings.forEach(b => {
+      const state = deriveState(b);
+      const el = document.querySelector(`[data-countdown="${b.booking_id}"]`);
+      if (el) {
+        el.textContent = fmtCountdown(b, state);
+        el.className = `countdown ${state}`;
+      }
+      const card = document.querySelector(`.card[data-id="${b.booking_id}"]`);
+      if (card) card.className = `card state-${state}`;
+
+      const prev = prevStates.get(b.booking_id);
+      if (prev !== state) {
+        // Only trigger sounds when transitioning AFTER initial load. On first pass,
+        // silently seed prevStates so bookings already due at page load don't alarm.
+        if (initialLoadDone) {
+          if (state === "soon" && prev === "upcoming") chimeSoon();
+          if (state === "due" && prev !== "due" && prev !== "started" && prev !== "done") {
+            alarmingIds.add(b.booking_id);
+            alarmLoop();
+          }
+        }
+        prevStates.set(b.booking_id, state);
+      }
+      // remove from alarm if resolved
+      if (state !== "due" && alarmingIds.has(b.booking_id)) alarmingIds.delete(b.booking_id);
+    });
+
+    // refresh overdue stat each tick
+    let due = 0, soon = 0;
+    bookings.forEach(b => {
+      const st = deriveState(b);
+      if (st === "due") due++;
+      if (st === "soon") soon++;
+    });
+    document.getElementById("statDue").textContent = due;
+    document.getElementById("statSoon").textContent = soon;
+  }
+  setInterval(tickCountdowns, TICK_MS);
+
+  // --- API ---
+  async function fetchBookings() {
+    try {
+      const res = await fetch(`${BACKEND_URL}?action=list&_=${Date.now()}`);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Backend error");
+      bookings = data.bookings || [];
+      lastFetch = Date.now();
+      document.getElementById("lastSync").textContent = `synced ${new Date().toTimeString().slice(0,8)}`;
+      refillStaffFilter();
+      render();
+      // After the first render seeds prevStates, future ticks can legitimately
+      // fire alarms on true state transitions.
+      if (!initialLoadDone) {
+        tickCountdowns(); // seed prevStates silently (initialLoadDone still false)
+        initialLoadDone = true;
+      }
+    } catch (e) {
+      document.getElementById("content").className = "empty";
+      document.getElementById("content").innerHTML = `❌ Failed to load: ${escapeHtml(e.message)}<br><small>Check BACKEND_URL in index.html</small>`;
+    }
+  }
+  setInterval(fetchBookings, REFRESH_MS);
+
+  function refillStaffFilter() {
+    const sel = document.getElementById("staffFilter");
+    const current = sel.value;
+    const staff = [...new Set(bookings.map(b => b.staff_name).filter(Boolean))].sort();
+    sel.innerHTML = `<option value="">All staff (${bookings.length})</option>` +
+      staff.map(s => `<option value="${escapeHtml(s)}" ${s === current ? "selected" : ""}>${escapeHtml(s)}</option>`).join("");
+  }
+  document.getElementById("staffFilter").addEventListener("change", render);
+
+  async function postStatus(bookingId, status, note) {
+    try {
+      const body = new URLSearchParams({ action: "update", booking_id: bookingId, status, note: note || "" });
+      const res = await fetch(BACKEND_URL, { method: "POST", body });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Update failed");
+      // optimistic: merge locally
+      const b = bookings.find(x => x.booking_id === bookingId);
+      if (b) { b.status = status; if (note) b.note = note; if (status === "started") b.started_at = new Date().toISOString(); }
+      alarmingIds.delete(bookingId);
+      render();
+      toast(`Marked ${status}`);
+    } catch (e) {
+      toast(`Error: ${e.message}`);
+    }
+  }
+
+  window.markStatus = (id, status) => {
+    ensureAudio(); // user gesture: unlock audio
+    postStatus(id, status, "");
+  };
+  window.openModal = (id, action) => {
+    ensureAudio();
+    modalCtx = { bookingId: id, action };
+    document.getElementById("modalTitle").textContent = action === "delayed" ? "Mark delayed / add note" : "Add note";
+    document.getElementById("modalText").value = "";
+    document.getElementById("modal").classList.add("open");
+    setTimeout(() => document.getElementById("modalText").focus(), 50);
+  };
+  window.closeModal = () => document.getElementById("modal").classList.remove("open");
+
+  // --- Booking detail modal ---
+  let infoCtx = null;
+  window.openInfo = (bookingId) => {
+    const b = bookings.find(x => x.booking_id === bookingId);
+    if (!b) return;
+    infoCtx = b;
+    document.getElementById("infoName").textContent = b.customer_name || "Unknown";
+    document.getElementById("infoSub").textContent =
+      `${fmtTime(b.start_time)}${b.end_time ? "–" + fmtTime(b.end_time) : ""}  ·  ${b.booking_id}  ·  ${b.booking_status || ""}`;
+
+    const medium = detectMedium(b);
+    const phone = b.customer_contact_no || "";
+    const phoneDigits = phone.replace(/\D/g, "");
+    const rows = [];
+    rows.push(["Staff", escapeHtml(b.staff_name || "—")]);
+    rows.push(["Service", escapeHtml(b.service_name || "—")]);
+    rows.push(["Medium", `${medium.icon} ${escapeHtml(medium.label)}`]);
+    if (phone) rows.push(["Phone",
+      `<a href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a> &nbsp; · &nbsp; <a href="https://wa.me/${escapeHtml(phoneDigits)}" target="_blank">WhatsApp ↗</a>`]);
+    if (b.customer_email) rows.push(["Email",
+      `<a href="mailto:${escapeHtml(b.customer_email)}">${escapeHtml(b.customer_email)}</a>`]);
+    if (b.duration) rows.push(["Duration", escapeHtml(b.duration)]);
+    if (b.booked_on) rows.push(["Booked on", escapeHtml(b.booked_on)]);
+
+    let html = `<dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+
+    // Custom booking form fields (preferred mode, topics, platform used, query, etc.)
+    const cf = b.custom_fields || {};
+    const cfEntries = Object.entries(cf).filter(([k, v]) => v && String(v).trim() !== "");
+    if (cfEntries.length) {
+      html += `<div class="section-title">Booking form responses</div>`;
+      html += `<dl>${cfEntries.map(([k, v]) =>
+        `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(String(v))}</dd>`).join("")}</dl>`;
+    }
+
+    if (b.notes) {
+      html += `<div class="section-title">Notes</div><div style="font-size:12.5px">${escapeHtml(b.notes)}</div>`;
+    }
+    if (b.note) {
+      html += `<div class="section-title">Rep note (salesometer)</div><div style="font-size:12.5px;color:#d0bdec">${escapeHtml(b.note)}</div>`;
+    }
+    if (!cfEntries.length && !b.notes) {
+      html += `<div class="empty-info" style="margin-top:10px">No extra booking form data captured.</div>`;
+    }
+
+    document.getElementById("infoBody").innerHTML = html;
+    document.getElementById("infoModal").classList.add("open");
+  };
+  window.closeInfo = () => document.getElementById("infoModal").classList.remove("open");
+  window.openCrm = () => {
+    if (!infoCtx) return;
+    const phoneDigits = (infoCtx.customer_contact_no || "").replace(/\D/g, "");
+    const q = phoneDigits || infoCtx.customer_email || infoCtx.customer_name || "";
+    // Zoho CRM global search URL (India DC). If user's DC differs, adjust here.
+    window.open(`https://crm.zoho.in/crm/search?searchword=${encodeURIComponent(q)}`, "_blank");
+  };
+  window.submitModal = () => {
+    const note = document.getElementById("modalText").value.trim();
+    postStatus(modalCtx.bookingId, modalCtx.action, note);
+    closeModal();
+  };
+
+  document.getElementById("soundBtn").addEventListener("click", (e) => {
+    soundOn = !soundOn;
+    e.currentTarget.classList.toggle("on", soundOn);
+    e.currentTarget.textContent = soundOn ? "🔊 Sound" : "🔇 Muted";
+    if (soundOn) ensureAudio();
+  });
+
+  function toast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 2200);
+  }
+
+  // Unlock audio on first interaction (browser autoplay policy)
+  document.addEventListener("click", () => ensureAudio(), { once: true });
+
+  // ==================  PASSWORD GATE  ==================
+  //
+  // HOW TO CHANGE THE PASSWORD:
+  //   1. Open any browser console (F12).
+  //   2. Paste:  await generatePasswordHash("your-new-password")
+  //   3. Copy the 64-char hex hash it prints.
+  //   4. Replace the PASSWORD_HASH string below with the new hash.
+  //   5. Commit + push → Vercel auto-deploys.
+  //   6. All team members must re-enter the new password once
+  //      (old localStorage auth becomes invalid automatically).
+  //
+  // Current password is: enrichwise2026  ← CHANGE THIS AFTER FIRST DEPLOY
+  const PASSWORD_HASH = "ea515f09aecdec67757e62706ea24789ef4635284dfab8973edd429eb1d31bf0";
+  const AUTH_TTL_DAYS = 30;
+
+  async function sha256Hex(s) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+  // Helper for generating a new hash from the browser console
+  window.generatePasswordHash = async (pwd) => {
+    const h = await sha256Hex(pwd);
+    console.log("New PASSWORD_HASH value:\n" + h);
+    return h;
+  };
+
+  async function isAuthed() {
+    try {
+      const raw = localStorage.getItem("salesometer_auth");
+      if (!raw) return false;
+      const [hash, tsStr] = raw.split("|");
+      if (hash !== PASSWORD_HASH) return false;
+      if (Date.now() - parseInt(tsStr, 10) > AUTH_TTL_DAYS * 86400 * 1000) return false;
+      return true;
+    } catch { return false; }
+  }
+
+  function showPasswordPrompt() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;inset:0;background:#0b0f17;display:flex;align-items:center;justify-content:center;z-index:9999";
+      overlay.innerHTML = `
+        <div style="background:var(--panel);padding:30px;border-radius:12px;border:1px solid var(--border);width:340px;max-width:90vw">
+          <h2 style="margin:0 0 6px;font-size:18px;font-weight:600">SALESOMETER</h2>
+          <p style="color:var(--muted);font-size:12.5px;margin:0 0 16px">Enter team password to continue</p>
+          <input id="__pwd" type="password" autocomplete="current-password"
+                 style="width:100%;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font-size:14px;font-family:inherit">
+          <div id="__err" style="color:var(--red);font-size:11.5px;margin-top:8px;display:none">Wrong password</div>
+          <button id="__go"
+                  style="width:100%;padding:10px;margin-top:12px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-family:inherit;font-size:13.5px">
+            Unlock
+          </button>
+        </div>`;
+      document.body.appendChild(overlay);
+      const input = overlay.querySelector("#__pwd");
+      const err   = overlay.querySelector("#__err");
+      input.focus();
+      const submit = async () => {
+        const pwd = input.value;
+        const hash = await sha256Hex(pwd);
+        if (hash === PASSWORD_HASH) {
+          try { localStorage.setItem("salesometer_auth", `${hash}|${Date.now()}`); } catch {}
+          overlay.remove();
+          resolve();
+        } else {
+          err.style.display = "block";
+          input.value = "";
+          input.focus();
+        }
+      };
+      overlay.querySelector("#__go").onclick = submit;
+      input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+    });
+  }
+
+  (async () => {
+    if (!(await isAuthed())) await showPasswordPrompt();
+    fetchBookings();
+  })();
+</script>
+</body>
+</html>
