@@ -115,8 +115,48 @@ export default async function handler(req, res) {
   const isDebug = req.query.debug === '1';
   const debugLog = isDebug ? [] : null;
 
+  // First try without staff_id — services with let_customer_select_staff=true
+  // return aggregated service-level availability this way. If that returns
+  // slots, we use them directly. Fall back to per-staff union if empty.
+  async function fetchServiceLevel() {
+    const r = await zohoGet('/bookings/v1/json/availableslots', {
+      service_id: serviceId,
+      selected_date: dateStr
+    });
+    if (debugLog) debugLog.push({ mode: 'service_only', status: r.status, ok: r.ok, raw: r.data });
+    if (!r.ok) return [];
+    const rv = r.data?.response?.returnvalue;
+    let raw = [];
+    if (Array.isArray(rv?.data)) raw = rv.data;
+    else if (Array.isArray(rv?.response)) raw = rv.response;
+    else if (Array.isArray(rv)) raw = rv;
+    const timePattern = /^\d{1,2}:\d{2}\s?(AM|PM)?$/i;
+    return raw
+      .map(s => (typeof s === 'string' ? s.trim() : (s?.time || s?.from_time || '')))
+      .filter(s => timePattern.test(s));
+  }
+
   try {
-    // Fan out to all 5 staff in parallel for this single date
+    // Attempt service-level query first
+    const serviceLevelSlots = await fetchServiceLevel();
+
+    // If service-level returned slots, short-circuit — every slot is available
+    // to all staff in the pool (Zoho auto-assigns)
+    if (serviceLevelSlots.length > 0) {
+      const sortedSlots = serviceLevelSlots
+        .sort((a, b) => timeToMinutes(a) - timeToMinutes(b))
+        .map(time => ({ time, staff_ids: STAFF_POOL }));
+      return res.status(200).json({
+        ok: true,
+        service_id: serviceId,
+        date: dateStr,
+        iso,
+        slots: sortedSlots,
+        ...(isDebug ? { debug: debugLog, mode: 'service_level' } : {})
+      });
+    }
+
+    // Fall back to per-staff union
     const staffResults = await Promise.all(
       STAFF_POOL.map(async (sid) => {
         try {
@@ -148,7 +188,7 @@ export default async function handler(req, res) {
       date: dateStr,
       iso,
       slots: sortedSlots,
-      ...(isDebug ? { debug: debugLog } : {})
+      ...(isDebug ? { debug: debugLog, mode: 'per_staff_union' } : {})
     });
   } catch (err) {
     console.error('[zoho/slots] error:', err.message);
