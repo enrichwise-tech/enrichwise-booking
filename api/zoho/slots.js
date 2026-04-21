@@ -64,12 +64,14 @@ function timeToMinutes(t) {
   return h * 60 + min;
 }
 
-async function fetchSlotsForStaff(serviceId, staffId, dateStr) {
+async function fetchSlotsForStaff(serviceId, staffId, dateStr, debug) {
   const r = await zohoGet('/bookings/v1/json/availableslots', {
     service_id: serviceId,
     staff_id: staffId,
     selected_date: dateStr
   });
+
+  if (debug) debug.push({ staffId, status: r.status, ok: r.ok, raw: r.data });
 
   if (!r.ok) return [];
 
@@ -110,15 +112,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing or invalid track (expected instant|callback)' });
   }
 
+  const isDebug = req.query.debug === '1';
+  const debugLog = isDebug ? [] : null;
+
   try {
     // Fan out to all 5 staff in parallel for this single date
     const staffResults = await Promise.all(
       STAFF_POOL.map(async (sid) => {
         try {
-          const slots = await fetchSlotsForStaff(serviceId, sid, dateStr);
+          const slots = await fetchSlotsForStaff(serviceId, sid, dateStr, debugLog);
           return { sid, slots };
         } catch (err) {
           console.warn('[zoho/slots] staff', sid, 'failed for', dateStr, err.message);
+          if (debugLog) debugLog.push({ staffId: sid, error: err.message });
           return { sid, slots: [] };
         }
       })
@@ -141,7 +147,8 @@ export default async function handler(req, res) {
       service_id: serviceId,
       date: dateStr,
       iso,
-      slots: sortedSlots
+      slots: sortedSlots,
+      ...(isDebug ? { debug: debugLog } : {})
     });
   } catch (err) {
     console.error('[zoho/slots] error:', err.message);
