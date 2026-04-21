@@ -68,6 +68,21 @@
   main { padding: 14px; }
   .grid { display: flex; flex-direction: column; gap: 10px; }
 
+  /* Flat dense grid — used when filtered to a single staff member so cards
+     don't waste horizontal space in 1-per-row time groups. */
+  .grid.flat {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+  }
+  .grid.flat .card { max-width: none; }
+
+  /* Time chip shown inside the card in flat view (replaces the left time label). */
+  .time-inline {
+    font-family: var(--mono); font-size: 17px; font-weight: 600;
+    color: var(--text); line-height: 1; margin-right: auto;
+  }
+
   /* Each time slot is one row: time label on the left, cards flow to the right */
   .time-group {
     display: flex; align-items: stretch; gap: 14px; min-height: 80px;
@@ -400,7 +415,11 @@
       return;
     }
 
-    main.className = "grid";
+    // If filtered to a single staff member, the time-group layout wastes
+    // horizontal space (1 card per row). Use a dense flat grid instead where
+    // the time is shown inside each card.
+    const singleStaffView = !!document.getElementById("staffFilter").value;
+    main.className = singleStaffView ? "grid flat" : "grid";
 
     // Group bookings by start time so same-time calls sit on the same row.
     const groupMap = new Map();
@@ -411,23 +430,25 @@
     });
     const groups = Array.from(groupMap.entries()).sort(([a], [b]) => a.localeCompare(b));
 
-    const cardHtml = (b) => {
+    const cardHtml = (b, showTime) => {
       const state = deriveState(b);
       const medium = detectMedium(b);
       const phone = b.customer_contact_no ? `<span class="phone-num">${escapeHtml(b.customer_contact_no)}</span>` : "";
       const note = b.note ? `<div class="note">💬 ${escapeHtml(b.note)}</div>` : "";
       const disabledStart = (state === "started" || state === "done") ? "disabled" : "";
       const disabledDone  = (state === "done") ? "disabled" : "";
+      const timeChip = showTime ? `<div class="time-inline">${fmtTime(b.start_time)}</div>` : "";
       return `
         <div class="card state-${state}" data-id="${b.booking_id}">
           <div class="row1">
+            ${timeChip}
             <div class="countdown ${state}" data-countdown="${b.booking_id}">${fmtCountdown(b, state)}</div>
           </div>
           <div class="customer" onclick="openInfo('${b.booking_id}')" title="Click for booking details">${escapeHtml(b.customer_name || "Unknown")}</div>
           <div class="meta">
             <span class="medium">${medium.icon} ${medium.label}</span>
             ${phone}
-            <span class="staff">👤 ${escapeHtml(b.staff_name || "—")}</span>
+            ${singleStaffView ? "" : `<span class="staff">👤 ${escapeHtml(b.staff_name || "—")}</span>`}
           </div>
           ${note}
           <div class="actions">
@@ -438,12 +459,17 @@
         </div>`;
     };
 
-    main.innerHTML = groups.map(([time, items]) => `
-      <div class="time-group">
-        <div class="time-label">${time}</div>
-        <div class="time-cards">${items.map(cardHtml).join("")}</div>
-      </div>
-    `).join("");
+    if (singleStaffView) {
+      // Flat, dense grid: all cards in one multi-column flow, time shown inside each.
+      main.innerHTML = list.map(b => cardHtml(b, true)).join("");
+    } else {
+      main.innerHTML = groups.map(([time, items]) => `
+        <div class="time-group">
+          <div class="time-label">${time}</div>
+          <div class="time-cards">${items.map(b => cardHtml(b, false)).join("")}</div>
+        </div>
+      `).join("");
+    }
 
     updateStats(stats);
     syncAlarms(newAlarming);
