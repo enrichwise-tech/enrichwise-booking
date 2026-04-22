@@ -29,6 +29,28 @@ import { zohoGetJson, zohoPostJson, zohoPutJson } from './_client.js';
 
 const CRM_BASE = '/crm/v6';
 
+// Cache of resolved user email -> Zoho user ID (per Lambda lifetime)
+const userIdCache = new Map();
+
+async function resolveUserIdByEmail(email) {
+  if (!email) return null;
+  const key = email.toLowerCase();
+  if (userIdCache.has(key)) return userIdCache.get(key);
+  try {
+    // Zoho CRM v6 users endpoint — fetch active users and match by email client-side
+    const r = await zohoGetJson(`${CRM_BASE}/users`, { type: 'ActiveUsers' });
+    if (!r.ok) return null;
+    const users = r.data?.users || [];
+    const hit = users.find(u => (u.email || '').toLowerCase() === key);
+    const id = hit?.id || null;
+    userIdCache.set(key, id);
+    return id;
+  } catch (err) {
+    console.warn('[zoho/_crm] user lookup failed for', email, err.message);
+    return null;
+  }
+}
+
 // Map our funnel stages to a human-readable label for the Description log.
 const STAGE_LABEL = {
   otp_sent:          'OTP sent',
@@ -109,6 +131,25 @@ export async function upsertFunnelLead(info = {}) {
   // source the team / other systems have set.
   if (!existing) {
     fields.Lead_Source = 'Enrichwise Booking App';
+
+    // Default owner + RM to Plato for booking-app leads. Configurable via env
+    // so we can re-route later without code change. Only set on create so we
+    // don't clobber manual reassignments the team has done.
+    const defaultOwnerEmail = (process.env.BOOKING_DEFAULT_OWNER_EMAIL || 'pl1.enrichwise@gmail.com').trim();
+    const defaultRMEmail    = (process.env.BOOKING_DEFAULT_RM_EMAIL || defaultOwnerEmail).trim();
+    const rmFieldName       = (process.env.BOOKING_RM_FIELD || 'RM1').trim();
+
+    if (defaultOwnerEmail) {
+      const ownerId = await resolveUserIdByEmail(defaultOwnerEmail);
+      if (ownerId) fields.Owner = ownerId;
+      else console.warn('[zoho/_crm] could not resolve owner email to user ID:', defaultOwnerEmail);
+    }
+    if (defaultRMEmail && rmFieldName) {
+      // RM1 is a User Lookup field — pass the resolved user ID
+      const rmUserId = await resolveUserIdByEmail(defaultRMEmail);
+      if (rmUserId) fields[rmFieldName] = rmUserId;
+      else console.warn('[zoho/_crm] could not resolve RM email to user ID:', defaultRMEmail);
+    }
   }
 
   // Lead_Status mapping — must match your Zoho CRM Lead_Status picklist values exactly.

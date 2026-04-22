@@ -220,42 +220,26 @@ body {
 .main { display: flex; flex-direction: column; }
 .site-footer {
   border-top: 1px solid var(--border);
-  padding: 18px 32px 24px;
+  padding: 10px 24px 12px;
   background: #f2f1ee;
   margin-top: auto;
 }
-.footer-services {
-  display: flex; flex-wrap: wrap; justify-content: center;
-  align-items: center; gap: 6px 10px;
-  font-size: 11px; color: var(--ink-2);
-  text-align: center;
-  margin-bottom: 8px;
-}
-.footer-services-label {
-  font-weight: 600; color: var(--ink);
-  margin-right: 4px;
-}
 .footer-credentials {
   display: flex; flex-wrap: wrap; justify-content: center;
-  align-items: center; gap: 6px 10px;
-  font-size: 11px; color: var(--ink-2);
+  align-items: center; gap: 4px 8px;
+  font-size: 10px; color: var(--ink-2);
   text-align: center;
 }
 .footer-credential { font-weight: 500; letter-spacing: 0.1px; }
 .footer-sep { color: var(--ink-3); }
-.footer-offices {
-  text-align: center;
-  font-size: 11px; color: var(--ink-2);
-  margin-top: 8px;
-}
 .footer-bottom {
   text-align: center;
-  font-size: 10px; color: var(--ink-3);
-  margin-top: 6px; letter-spacing: 0.2px;
+  font-size: 9px; color: var(--ink-3);
+  margin-top: 3px; letter-spacing: 0.2px;
 }
 @media (max-width: 860px) {
-  .site-footer { padding: 14px 16px 18px; }
-  .footer-credentials { font-size: 10px; gap: 4px 8px; }
+  .site-footer { padding: 8px 14px 10px; }
+  .footer-credentials { font-size: 10px; gap: 3px 6px; }
   .footer-sep { display: none; }
 }
 .brand { display: none; }  /* replaced by top bar brand on mobile */
@@ -501,12 +485,6 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .cal-day:hover:not(:disabled):not(.sel) { background: var(--brand-light); border-color: var(--brand-light); }
 .cal-day.sel { background: var(--brand); color: #fff; font-weight: 600; }
 .cal-day:disabled { color: var(--ink-3); cursor: not-allowed; opacity: 0.4; }
-.cal-day.unavailable { color: var(--ink-3); cursor: not-allowed; opacity: 0.45; text-decoration: line-through; }
-.cal-day.unavailable:hover { background: transparent; border-color: transparent; }
-/* While month availability is being fetched, mark future dates as pending
-   (dimmed, not clickable) so we don't flash "clickable → greyed out" on load */
-.cal-day.pending { color: var(--ink-3); cursor: wait; opacity: 0.35; }
-.cal-day.pending:hover { background: transparent; border-color: transparent; }
 .cal-day.empty { visibility: hidden; cursor: default; }
 .cal-day.today { font-weight: 700; }
 .cal-day.today:not(.sel)::after {
@@ -968,7 +946,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     <label class="field-label">Which platform are you currently using for Investments <span class="req">*</span></label>
     <input class="field" id="fPlatform" type="text" placeholder="e.g. Zerodha, ICICI Direct, none yet" oninput="onDetailsInput()">
 
-    <label class="field-label">Please describe your query in brief <span style="color: var(--ink-3); font-weight: 500;">(optional)</span></label>
+    <label class="field-label">Please describe your query in brief <span class="req">*</span></label>
     <textarea class="field" id="fQuery" rows="3" placeholder="Anything specific you'd like to discuss?" oninput="onDetailsInput()" style="resize: vertical; min-height: 70px; font-family: inherit;"></textarea>
 
     <div class="error-msg" id="detailsError">
@@ -1041,37 +1019,14 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     </div> <!-- /.shell -->
 
     <footer class="site-footer">
-      <div class="footer-services">
-        <span class="footer-services-label">Services:</span>
-        <span class="footer-credential">Mutual Funds &amp; SIF</span>
-        <span class="footer-sep">·</span>
-        <span class="footer-credential">Stocks &amp; Demat</span>
-        <span class="footer-sep">·</span>
-        <span class="footer-credential">Tax &amp; GST Filing</span>
-        <span class="footer-sep">·</span>
-        <span class="footer-credential">Insurance</span>
-        <span class="footer-sep">·</span>
-        <span class="footer-credential">Wills &amp; Legal</span>
-        <span class="footer-sep">·</span>
-        <span class="footer-credential">Retirement Solutions</span>
-        <span class="footer-sep">·</span>
-        <span class="footer-credential">NRI Services</span>
-        <span class="footer-sep">·</span>
-        <span class="footer-credential">Global Stocks &amp; GIFT City</span>
-        <span class="footer-sep">·</span>
-        <span class="footer-credential">Loans</span>
-      </div>
       <div class="footer-credentials">
         <span class="footer-credential">Since 2005</span>
         <span class="footer-sep">·</span>
-        <span class="footer-credential">AMFI Registered Mutual Fund Distributor</span>
+        <span class="footer-credential">AMFI Registered MF &amp; SIF Distributor</span>
         <span class="footer-sep">·</span>
-        <span class="footer-credential">AMFI Registered SIF Distributor</span>
+        <span class="footer-credential">ISO 9001:2015</span>
         <span class="footer-sep">·</span>
-        <span class="footer-credential">ISO 9001:2015 Certified</span>
-      </div>
-      <div class="footer-offices">
-        <span class="footer-credential">Offices: Thane &middot; Navi Mumbai</span>
+        <span class="footer-credential">Thane &amp; Navi Mumbai</span>
       </div>
       <div class="footer-bottom">
         <span>&copy; Enrichwise Financial Services Pvt Ltd</span>
@@ -1710,7 +1665,8 @@ function onDetailsInput() {
     && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)
     && d.topics.length > 0
     && !!d.mode
-    && d.platform.length >= 1;
+    && d.platform.length >= 1
+    && d.query.trim().length >= 5;
   document.getElementById('detailsBtn').disabled = !valid;
   document.getElementById('detailsError').classList.remove('show');
 }
@@ -1721,7 +1677,8 @@ async function submitDetails() {
     && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)
     && d.topics.length > 0
     && !!d.mode
-    && d.platform.length >= 1;
+    && d.platform.length >= 1
+    && d.query.trim().length >= 5;
   if (!valid) {
     document.getElementById('detailsErrorText').textContent = 'Please fill in all required fields';
     document.getElementById('detailsError').classList.add('show');
@@ -1741,8 +1698,6 @@ async function submitDetails() {
 /* ── Step 5: Calendar + slot picker ── */
 var calView = null; // { year, month }  (month 0-indexed)
 var calMonthsAhead = 2; // how far forward user can navigate from current month
-var calCounts = {};    // { "2026-05-13": 0, "2026-05-14": 12, ... } populated by month-slots API
-var calCountsLoading = {}; // { "2026-5": true } to prevent duplicate fetches per month
 
 function loadSlots() {
   state.slotDate = ''; state.slotDateIso = ''; state.slotTime = ''; state.slotStaffIds = [];
@@ -1785,84 +1740,11 @@ function renderCalendar() {
     var past = dt.getTime() < now.getTime();
     var isToday = dt.getTime() === now.getTime();
     var selected = state.slotDateIso === iso;
-    // Three states for future dates:
-    //   - past: always disabled
-    //   - count known and 0: unavailable (strikethrough, disabled)
-    //   - count not yet fetched: pending (dim, disabled, cursor: wait)
-    //   - count known and >0: available (normal, clickable)
-    var hasCountData = calCounts.hasOwnProperty(iso);
-    var unavailable = !past && hasCountData && calCounts[iso] === 0;
-    var pending = !past && !hasCountData;
     var cls = 'cal-day';
     if (isToday) cls += ' today';
     if (selected) cls += ' sel';
-    if (unavailable) cls += ' unavailable';
-    else if (pending) cls += ' pending';
-    var disabled = past || unavailable || pending;
     html += '<button class="' + cls + '"'
-      + (disabled ? ' disabled' : '')
-      + ' data-iso="' + iso + '"'
-      + ' onclick="selectDate(\'' + iso + '\')">' + d + '</button>';
-  }
-  grid.innerHTML = html;
-
-  // Fire off month availability fetch in the background
-  loadMonthCounts(calView.year, calView.month);
-}
-
-async function loadMonthCounts(year, month0) {
-  var key = year + '-' + (month0 + 1);
-  if (calCountsLoading[key]) return; // already in flight
-  calCountsLoading[key] = true;
-  try {
-    var url = API_BASE + '/api/zoho/month-slots?track=' + encodeURIComponent(state.track || 'instant')
-      + '&year=' + year + '&month=' + (month0 + 1);
-    var res = await fetch(url);
-    var data = await res.json();
-    if (data && data.ok && data.counts) {
-      // Merge into master cache (so navigating back and forth doesn't re-fetch)
-      Object.keys(data.counts).forEach(function(iso) {
-        calCounts[iso] = data.counts[iso];
-      });
-      // Re-render only if we're still on the same month
-      if (calView && calView.year === year && calView.month === month0) {
-        renderCalendarOnly();
-      }
-    }
-  } catch (err) {
-    console.warn('[calendar] month-slots fetch failed:', err.message);
-  }
-  calCountsLoading[key] = false;
-}
-
-// Re-render calendar grid WITHOUT firing month-counts fetch (used after counts load)
-function renderCalendarOnly() {
-  var grid = document.getElementById('calGrid');
-  if (!grid) return;
-  var now = new Date(); now.setHours(0,0,0,0);
-  var firstDay = new Date(calView.year, calView.month, 1);
-  var firstDow = (firstDay.getDay() + 6) % 7;
-  var daysInMonth = new Date(calView.year, calView.month + 1, 0).getDate();
-  var html = '';
-  for (var i = 0; i < firstDow; i++) html += '<div class="cal-day empty"></div>';
-  for (var d = 1; d <= daysInMonth; d++) {
-    var dt = new Date(calView.year, calView.month, d);
-    dt.setHours(0,0,0,0);
-    var iso = calView.year + '-' + pad2(calView.month + 1) + '-' + pad2(d);
-    var past = dt.getTime() < now.getTime();
-    var isToday = dt.getTime() === now.getTime();
-    var selected = state.slotDateIso === iso;
-    var hasCountData = calCounts.hasOwnProperty(iso);
-    var unavailable = !past && hasCountData && calCounts[iso] === 0;
-    var pending = !past && !hasCountData;
-    var cls = 'cal-day';
-    if (isToday) cls += ' today';
-    if (selected) cls += ' sel';
-    if (unavailable) cls += ' unavailable';
-    else if (pending) cls += ' pending';
-    var disabled = past || unavailable || pending;
-    html += '<button class="' + cls + '"'
-      + (disabled ? ' disabled' : '')
+      + (past ? ' disabled' : '')
       + ' data-iso="' + iso + '"'
       + ' onclick="selectDate(\'' + iso + '\')">' + d + '</button>';
   }
