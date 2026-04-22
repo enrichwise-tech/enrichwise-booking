@@ -683,7 +683,15 @@
       }
       stopAlarm(bookingId);
       render();
-      toast(status === "reset" ? "Status reset" : `Marked ${status}`);
+      // Zoho writeback feedback: if the backend attempted to sync to Zoho
+      // Bookings and failed, tell the rep — sheet status is already saved,
+      // but Zoho will still show the old status until they retry or fix it.
+      let msg = status === "reset" ? "Status reset" : `Marked ${status}`;
+      if (data.zoho && data.zoho.attempted) {
+        if (data.zoho.ok) msg += " · synced to Zoho ✓";
+        else msg += ` · Zoho sync failed: ${data.zoho.error || "unknown"}`;
+      }
+      toast(msg);
     } catch (e) {
       toast(`Error: ${e.message}`);
     }
