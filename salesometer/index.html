@@ -58,6 +58,7 @@
   .stat.yellow .n { color: var(--yellow); }
   .stat.green .n { color: var(--green); }
   .stat.orange .n { color: var(--orange); }
+  .stat.blue .n { color: var(--blue); }
 
   .controls { display: flex; align-items: center; gap: 10px; }
   select {
@@ -220,6 +221,7 @@
     <div class="stat" data-filter="active" title="Show only pending (default)"><div class="n" id="statActive">—</div><div class="l">Pending</div></div>
     <div class="stat red" data-filter="due" title="Show overdue only"><div class="n" id="statDue">—</div><div class="l">Overdue</div></div>
     <div class="stat yellow" data-filter="soon" title="Show next 5 min"><div class="n" id="statSoon">—</div><div class="l">≤5 min</div></div>
+    <div class="stat blue" data-filter="started" title="Show calls in progress"><div class="n" id="statStarted">—</div><div class="l">Ongoing</div></div>
     <div class="stat orange" data-filter="no_show" title="Show no-shows"><div class="n" id="statNoShow">—</div><div class="l">No-show</div></div>
     <div class="stat green" data-filter="done" title="Show completed"><div class="n" id="statDone">—</div><div class="l">Done</div></div>
   </div>
@@ -436,12 +438,13 @@
 
     // Compute stats from the full staff-filtered list (not state-filtered),
     // so the tile numbers don't collapse when you click one.
-    const stats = { total: staffFiltered.length, due: 0, soon: 0, done: 0, no_show: 0 };
+    const stats = { total: staffFiltered.length, due: 0, soon: 0, started: 0, done: 0, no_show: 0 };
     const newAlarming = new Set();
     staffFiltered.forEach(b => {
       const st = deriveState(b);
       if (st === "due")  { stats.due++; newAlarming.add(b.booking_id); }
       if (st === "soon") stats.soon++;
+      if (st === "started") stats.started++;
       if (st === "done") stats.done++;
       if (st === "no_show") stats.no_show++;
     });
@@ -565,6 +568,7 @@
     document.getElementById("statActive").textContent = s.total - s.done - s.no_show;
     document.getElementById("statDue").textContent = s.due;
     document.getElementById("statSoon").textContent = s.soon;
+    document.getElementById("statStarted").textContent = s.started;
     document.getElementById("statNoShow").textContent = s.no_show;
     document.getElementById("statDone").textContent = s.done;
   }
