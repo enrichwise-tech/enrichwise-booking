@@ -820,7 +820,7 @@
   //
   // Current password is: enrichwise2026  ← CHANGE THIS AFTER FIRST DEPLOY
   const PASSWORD_HASH = "ea515f09aecdec67757e62706ea24789ef4635284dfab8973edd429eb1d31bf0";
-  const AUTH_TTL_DAYS = 30;
+  const AUTH_TTL_DAYS = 1;
 
   async function sha256Hex(s) {
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
