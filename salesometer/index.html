@@ -270,11 +270,37 @@
   let bookings = [];
   let lastFetch = 0;
   let soundOn = true; // default ON — reps can mute via the 🔊 button if needed
-  let alarmingIds = new Set();
+  // Map<bookingId, { startedAt: number, tone: {f1, f2, label} }>
+  const alarmingMap = new Map();
+  const ALARM_MAX_MS = 10 * 60 * 1000; // auto-silence each card's alarm after 10 min
   let alarmCtx = null;
   let alarmInterval = null;
+  let alarmRoundRobin = 0;
   let modalCtx = { bookingId: null, action: null };
   let initialLoadDone = false; // skip alarm for bookings that were already due at page load
+
+  // --- Per-rep alarm tones ---
+  // Each staff name hashes to one of these 7 distinct 2-note patterns so reps
+  // can recognise their own call by ear. Patterns are spaced roughly a 4th
+  // apart in pitch so they're clearly distinguishable.
+  const ALARM_TONES = [
+    { f1: 880,  f2: 660,  label: "high-E"      },
+    { f1: 740,  f2: 540,  label: "mid-siren"   },
+    { f1: 440,  f2: 330,  label: "low-A"       },
+    { f1: 987,  f2: 740,  label: "bright-bell" },
+    { f1: 587,  f2: 440,  label: "soft-warble" },
+    { f1: 1175, f2: 880,  label: "very-high"   },
+    { f1: 587,  f2: 740,  label: "up-chirp"    }  // unique ascending shape
+  ];
+  function hashString(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+  function toneForStaff(staffName) {
+    if (!staffName) return ALARM_TONES[1]; // default = mid-siren
+    return ALARM_TONES[hashString(staffName) % ALARM_TONES.length];
+  }
 
   // --- Audio (Web Audio API) ---
   function ensureAudio() {
@@ -293,14 +319,33 @@
     o.start(); o.stop(alarmCtx.currentTime + duration / 1000);
   }
   function chimeSoon() { beep(880, 140); setTimeout(() => beep(1100, 140), 160); }
-  function alarmLoop() {
-    if (!alarmInterval) {
-      alarmInterval = setInterval(() => {
-        if (alarmingIds.size === 0) { clearInterval(alarmInterval); alarmInterval = null; return; }
-        beep(740, 220, "square", 0.22);
-        setTimeout(() => beep(540, 260, "square", 0.22), 260);
-      }, 1400);
-    }
+
+  function startAlarm(bookingId, staffName) {
+    if (alarmingMap.has(bookingId)) return;
+    alarmingMap.set(bookingId, { startedAt: Date.now(), tone: toneForStaff(staffName) });
+    if (!alarmInterval) runAlarmLoop();
+  }
+  function stopAlarm(bookingId) { alarmingMap.delete(bookingId); }
+
+  function runAlarmLoop() {
+    alarmInterval = setInterval(() => {
+      // Auto-expire any alarm that's been going for >10 min — card stays
+      // visually red but the beeping stops.
+      const now = Date.now();
+      for (const [id, info] of alarmingMap) {
+        if (now - info.startedAt > ALARM_MAX_MS) alarmingMap.delete(id);
+      }
+      if (alarmingMap.size === 0) {
+        clearInterval(alarmInterval); alarmInterval = null; return;
+      }
+      // Round-robin: play one rep's tone per tick so multiple simultaneous
+      // alarms cycle through instead of overlapping into mush.
+      const alarms = Array.from(alarmingMap.values());
+      const info = alarms[alarmRoundRobin % alarms.length];
+      alarmRoundRobin++;
+      beep(info.tone.f1, 220, "square", 0.22);
+      setTimeout(() => beep(info.tone.f2, 260, "square", 0.22), 260);
+    }, 1400);
   }
 
   // --- Clock ---
@@ -524,13 +569,9 @@
     document.getElementById("statDone").textContent = s.done;
   }
 
-  function syncAlarms(newSet) {
-    // chime for newly-soon (yellow) — handled by countdown tick
-    const nowAlarming = alarmingIds;
-    for (const id of newSet) if (!nowAlarming.has(id)) {} // newly due is fine, alarm loop handles sound
-    alarmingIds = newSet;
-    if (alarmingIds.size > 0) alarmLoop();
-  }
+  // No-op — kept for compatibility. Per-booking alarms are now managed entirely
+  // through startAlarm / stopAlarm called from tickCountdowns on state transitions.
+  function syncAlarms(_ignored) { /* intentionally empty */ }
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -556,14 +597,13 @@
         if (initialLoadDone) {
           if (state === "soon" && prev === "upcoming") chimeSoon();
           if (state === "due" && prev !== "due" && prev !== "started" && prev !== "done") {
-            alarmingIds.add(b.booking_id);
-            alarmLoop();
+            startAlarm(b.booking_id, b.staff_name);
           }
         }
         prevStates.set(b.booking_id, state);
       }
-      // remove from alarm if resolved
-      if (state !== "due" && alarmingIds.has(b.booking_id)) alarmingIds.delete(b.booking_id);
+      // remove from alarm if resolved (rep clicked, or Zoho marked it done)
+      if (state !== "due" && alarmingMap.has(b.booking_id)) stopAlarm(b.booking_id);
     });
 
     // refresh overdue stat each tick
@@ -641,7 +681,7 @@
           if (status === "started") b.started_at = new Date().toISOString();
         }
       }
-      alarmingIds.delete(bookingId);
+      stopAlarm(bookingId);
       render();
       toast(status === "reset" ? "Status reset" : `Marked ${status}`);
     } catch (e) {
@@ -677,7 +717,8 @@
     const phone = b.customer_contact_no || "";
     const phoneDigits = phone.replace(/\D/g, "");
     const rows = [];
-    rows.push(["Staff", escapeHtml(b.staff_name || "—")]);
+    const tone = toneForStaff(b.staff_name || "");
+    rows.push(["Staff", `${escapeHtml(b.staff_name || "—")} <span style="color:var(--muted);font-size:11px">· 🔔 ${tone.label}</span>`]);
     rows.push(["Service", escapeHtml(b.service_name || "—")]);
     rows.push(["Medium", `${medium.icon} ${escapeHtml(medium.label)}`]);
     if (phone) rows.push(["Phone",
