@@ -453,17 +453,17 @@
     });
 
     // Apply state filter for what actually gets displayed in the grid.
-    // "active" (default Pending view) hides rep-confirmed terminal states
-    // (done / no_show). Zoho-auto-marked cards stay visible so the rep can
-    // see & confirm them.
+    // "active" (default Pending view) hides any terminal state (done / no_show)
+    // regardless of whether it came from the rep or Zoho Flow. This matches
+    // the Pending tile's count formula (total - done - no_show) so the grid
+    // and the counter stay consistent.
     let list;
     if (stateFilter === "" || stateFilter === "all") {
       list = staffFiltered;
     } else if (stateFilter === "active") {
       list = staffFiltered.filter(b => {
         const st = deriveState(b);
-        const repTerminal = (st === "done" || st === "no_show") && b.status_source === "rep";
-        return !repTerminal;
+        return st !== "done" && st !== "no_show";
       });
     } else {
       list = staffFiltered.filter(b => deriveState(b) === stateFilter);
