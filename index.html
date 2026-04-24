@@ -332,6 +332,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
   text-decoration: underline; text-underline-offset: 3px;
 }
 .otp-alt-link:hover { color: var(--brand-dark); }
+.otp-alt-link.disabled { color: var(--ink-3); cursor: not-allowed; pointer-events: none; text-decoration: none; }
 .email-otp-form { margin-top: 14px; }
 .email-otp-form input {
   width: 100%; padding: 13px 14px; font-size: 16px;
@@ -827,7 +828,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       <span class="btn-text">Get OTP on WhatsApp</span>
     </button>
     <div class="otp-alt-wrap" id="otpAltWrap">
-      <span class="otp-alt-link" onclick="showEmailOtp()">Don't have WhatsApp? Get OTP via email instead</span>
+      <span class="otp-alt-link disabled" id="emailOtpLink" onclick="showEmailOtp()">Don't have WhatsApp? Get OTP via email instead</span>
     </div>
     <div class="email-otp-form" id="emailOtpForm" style="display:none">
       <input type="email" id="otpEmail" placeholder="Email address" autocomplete="email" oninput="onEmailOtpInput()">
@@ -1476,6 +1477,7 @@ function onMobInput() {
   var minLen = Math.max(5, expected - 1);
   var valid = val.length >= minLen && val.length <= 15;
   document.getElementById('sendBtn').disabled = !valid;
+  document.getElementById('emailOtpLink').classList.toggle('disabled', !valid);
   document.getElementById('mobError').classList.remove('show');
 }
 
@@ -1514,6 +1516,7 @@ async function sendOtp() {
 }
 
 function showEmailOtp() {
+  if (document.getElementById('emailOtpLink').classList.contains('disabled')) return;
   document.getElementById('emailOtpForm').style.display = 'block';
   document.getElementById('otpAltWrap').style.display = 'none';
   setTimeout(function() { document.getElementById('otpEmail').focus(); }, 50);
