@@ -324,23 +324,6 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .resend-link:hover { text-decoration: underline; }
 .resend-link.disabled { color: var(--ink-3); pointer-events: none; }
 
-/* Email OTP fallback */
-.otp-alt-wrap { text-align: center; margin-top: 14px; }
-.otp-alt-link {
-  font-size: 13px; color: var(--brand);
-  cursor: pointer; font-weight: 500;
-  text-decoration: underline; text-underline-offset: 3px;
-}
-.otp-alt-link:hover { color: var(--brand-dark); }
-.email-otp-form { margin-top: 14px; }
-.email-otp-form input {
-  width: 100%; padding: 13px 14px; font-size: 16px;
-  color: var(--ink); background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  outline: none; font-family: inherit; box-sizing: border-box;
-}
-.email-otp-form input:focus { border-color: var(--brand); }
-
 /* Timer */
 .timer { font-variant-numeric: tabular-nums; }
 
@@ -826,20 +809,6 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       <div class="btn-spinner"></div>
       <span class="btn-text">Get OTP on WhatsApp</span>
     </button>
-    <div class="otp-alt-wrap" id="otpAltWrap">
-      <span class="otp-alt-link" onclick="showEmailOtp()">Don't have WhatsApp? Get OTP via email instead</span>
-    </div>
-    <div class="email-otp-form" id="emailOtpForm" style="display:none">
-      <input type="email" id="otpEmail" placeholder="Email address" autocomplete="email" oninput="onEmailOtpInput()">
-      <div class="error-msg" id="emailOtpError">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
-        <span id="emailOtpErrorText">Please enter a valid email address</span>
-      </div>
-      <button class="btn" id="sendEmailBtn" disabled onclick="sendOtpViaEmail()">
-        <div class="btn-spinner"></div>
-        <span class="btn-text">Send OTP via email</span>
-      </button>
-    </div>
   </div>
 
   <!-- STEP 2: OTP -->
@@ -849,7 +818,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       Back
     </button>
     <h1>Enter OTP</h1>
-    <p class="sub">Sent to <strong id="mobDisplay"></strong> <span id="otpMediumLabel">via WhatsApp</span></p>
+    <p class="sub">Sent to <strong id="mobDisplay"></strong> via WhatsApp</p>
     <div class="otp-row">
       <input class="otp-box" id="o0" maxlength="1" type="text" inputmode="numeric" autocomplete="one-time-code" oninput="otpType(0)" onkeydown="otpKey(event,0)" onpaste="otpPaste(event)">
       <input class="otp-box" id="o1" maxlength="1" type="text" inputmode="numeric" oninput="otpType(1)" onkeydown="otpKey(event,1)">
@@ -1499,10 +1468,8 @@ async function sendOtp() {
     if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
     state.mob = mob;
     state.cc = cc;
-    state.otpMedium = 'whatsapp';
     document.getElementById('mobDisplay').textContent = '+' + cc + ' ' + mob;
-    document.getElementById('otpMediumLabel').textContent = 'via WhatsApp';
-    trackEvent('otp_sent', { medium: 'whatsapp' });
+    trackEvent('otp_sent');
     go('s1');
     startTimer(30);
     setTimeout(function() { document.getElementById('o0').focus(); }, 100);
@@ -1511,62 +1478,6 @@ async function sendOtp() {
     document.getElementById('mobError').classList.add('show');
   }
   setLoading('sendBtn', false);
-}
-
-function showEmailOtp() {
-  document.getElementById('emailOtpForm').style.display = 'block';
-  document.getElementById('otpAltWrap').style.display = 'none';
-  setTimeout(function() { document.getElementById('otpEmail').focus(); }, 50);
-}
-
-function onEmailOtpInput() {
-  var email = document.getElementById('otpEmail').value.trim();
-  var valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
-  document.getElementById('sendEmailBtn').disabled = !valid;
-  document.getElementById('emailOtpError').classList.remove('show');
-}
-
-async function sendOtpViaEmail() {
-  var mob = document.getElementById('mob').value.replace(/\D/g, '');
-  var cc = document.getElementById('cc').value;
-  var email = document.getElementById('otpEmail').value.trim();
-  var expected = getExpectedLen();
-  if (mob.length < expected || mob.length > 15) {
-    document.getElementById('mobErrorText').textContent = 'Please enter your mobile number first';
-    document.getElementById('mobError').classList.add('show');
-    document.getElementById('mob').focus();
-    return;
-  }
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    document.getElementById('emailOtpErrorText').textContent = 'Please enter a valid email address';
-    document.getElementById('emailOtpError').classList.add('show');
-    return;
-  }
-  setLoading('sendEmailBtn', true);
-  try {
-    var res = await fetch(API_BASE + '/api/send-otp-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mobile: mob, country_code: cc, email: email })
-    });
-    var data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
-    state.mob = mob;
-    state.cc = cc;
-    state.email = email;
-    state.otpMedium = 'email';
-    state.otpEmail = email;
-    document.getElementById('mobDisplay').textContent = email;
-    document.getElementById('otpMediumLabel').textContent = 'via email';
-    trackEvent('otp_sent', { medium: 'email' });
-    go('s1');
-    startTimer(30);
-    setTimeout(function() { document.getElementById('o0').focus(); }, 100);
-  } catch (err) {
-    document.getElementById('emailOtpErrorText').textContent = err.message || 'Could not send OTP. Please try again.';
-    document.getElementById('emailOtpError').classList.add('show');
-  }
-  setLoading('sendEmailBtn', false);
 }
 
 /* ── Step 2: OTP ── */
@@ -1658,19 +1569,11 @@ async function resendOtp() {
   document.getElementById('verBtn').disabled = true;
   document.getElementById('otpError').classList.remove('show');
   try {
-    if (state.otpMedium === 'email' && state.otpEmail) {
-      await fetch(API_BASE + '/api/send-otp-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile: state.mob, country_code: state.cc, email: state.otpEmail })
-      });
-    } else {
-      await fetch(API_BASE + '/api/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile: state.mob, country_code: state.cc })
-      });
-    }
+    await fetch(API_BASE + '/api/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobile: state.mob, country_code: state.cc })
+    });
   } catch(e) {}
   startTimer(30);
   document.getElementById('o0').focus();
