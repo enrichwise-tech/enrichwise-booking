@@ -14,25 +14,19 @@
  *     corpus:"₹1 Cr – ₹5 Cr"
  *   }
  *
- * Zoho requires from_time in "dd-MMM-yyyy HH:mm:ss" 24-hour format, and staff_id.
+ * No staff_id is sent. Zoho auto-assigns a free staff from the service's
+ * pool — verified 2026-04-24 via /api/zoho/test-book-no-staff. This avoids
+ * the per-staff retry loop that previously masked the real error when all
+ * staff in our local pool happened to mismatch Zoho's actual schedule.
+ *
+ * Zoho requires from_time in "dd-MMM-yyyy HH:mm:ss" 24-hour format.
  */
 import { zohoPost } from './_client.js';
 import { sendAlert } from '../_alert.js';
 
 const DEFAULT_INSTANT_SVC  = '279048000000733018'; // Private consultation (Online)
 const DEFAULT_CALLBACK_SVC = '279048000000841186'; // unused
-const DEFAULT_STAFF_ID     = '279048000000288162';
 const TIME_ZONE            = 'Asia/Calcutta';
-
-// Fallback staff pool if frontend doesn't send staff_ids (shouldn't happen,
-// but keeps book working even on an older cached client)
-const FALLBACK_STAFF_POOL = [
-  '279048000000288162',
-  '279048000000371462',
-  '279048000000371472',
-  '279048000000371482',
-  '279048000000655616'
-];
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -60,10 +54,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body = req.body || {};
-  const { track, date, slot, name, email, mobile, corpus, topics, mode, platform, query, staff_ids } = body;
+  const { track, date, slot, name, email, mobile, corpus, topics, mode, platform, query } = body;
   const countryCode = String(body.country_code || '91').replace(/\D/g, '') || '91';
 
-  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, country_code: countryCode, topics, mode, platform, queryPresent: !!query, staff_ids });
+  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, country_code: countryCode, topics, mode, platform, queryPresent: !!query });
 
   if (!track || !['instant', 'callback'].includes(track)) {
     return res.status(400).json({ error: 'Invalid track' });
@@ -87,16 +81,6 @@ export default async function handler(req, res) {
     ? (process.env.ZOHO_INSTANT_SERVICE_ID || DEFAULT_INSTANT_SVC)
     : (process.env.ZOHO_CALLBACK_SERVICE_ID || DEFAULT_CALLBACK_SVC);
 
-  // Staff candidates: prefer whatever the frontend told us were available
-  // for this slot (from /api/zoho/slots), fall back to the full pool.
-  const candidateStaff = (Array.isArray(staff_ids) && staff_ids.length > 0)
-    ? staff_ids
-    : FALLBACK_STAFF_POOL;
-
-  // Zoho Bookings /appointment is form-encoded with service_id, staff_id,
-  // from_time, customer_details (JSON string), plus optional fields.
-  // Zoho Bookings v1 separates built-in fields (customer_details) from
-  // service-specific custom fields (additional_fields).
   const topicsArr = Array.isArray(topics) ? topics : (topics ? [topics] : []);
 
   const customerDetails = {
@@ -106,94 +90,30 @@ export default async function handler(req, res) {
   };
 
   const additionalFields = {
-    "I want to discuss": topicsArr.join(', '),
-    "Preferred mode": mode || '',
-    "Which platform are you currently using for Investments": platform || ''
+    'I want to discuss': topicsArr.join(', '),
+    'Preferred mode': mode || '',
+    'Which platform are you currently using for Investments': platform || ''
   };
-  // Optional free-text query — only include if user typed something
   if (query && String(query).trim()) {
-    additionalFields["Please describe your query in brief"] = String(query).trim();
+    additionalFields['Please describe your query in brief'] = String(query).trim();
   }
 
-  // Try each candidate staff in order. If Zoho says the staff is unavailable
-  // (e.g. got booked between slot fetch and book), move on to the next one.
-  // Any other failure (validation, auth, custom fields) aborts immediately.
-  let lastFailure = null;
-  let bookedStaffId = null;
-  let rvSuccess = null;
+  const formBody = {
+    service_id: serviceId,
+    from_time: `${date} ${time24}`,
+    customer_details: JSON.stringify(customerDetails),
+    additional_fields: JSON.stringify(additionalFields),
+    time_zone: TIME_ZONE,
+    notes: `Corpus: ${corpus || 'not specified'}`
+  };
 
-  for (const staffId of candidateStaff) {
-    const formBody = {
-      service_id: serviceId,
-      staff_id: staffId,
-      from_time: `${date} ${time24}`,          // e.g. "16-Apr-2026 16:30:00"
-      customer_details: JSON.stringify(customerDetails),
-      additional_fields: JSON.stringify(additionalFields),
-      time_zone: TIME_ZONE,
-      notes: `Corpus: ${corpus || 'not specified'}`
-    };
+  console.log('[zoho/book] posting (no staff_id, Zoho auto-assigns):', formBody);
 
-    console.log('[zoho/book] trying staff', staffId, 'form body:', formBody);
-
-    let r;
-    try {
-      r = await zohoPost('/bookings/v1/json/appointment', formBody);
-    } catch (err) {
-      console.error('[zoho/book] exception for staff', staffId, err.message);
-      lastFailure = { status: 500, message: err.message, data: null };
-      continue;
-    }
-
-    console.log('[zoho/book] staff', staffId, 'response status=', r.status, 'data=', JSON.stringify(r.data).slice(0, 600));
-
-    const rv = r.data?.response?.returnvalue || {};
-    const innerStatus = rv.status || r.data?.response?.status;
-    const innerMessage = rv.message || '';
-    const looksLikeFailure = innerStatus === 'failure' || /mandatory|invalid|error|not available|busy|unavailable/i.test(innerMessage);
-
-    if (r.ok && !looksLikeFailure) {
-      bookedStaffId = staffId;
-      rvSuccess = rv;
-      break;
-    }
-
-    lastFailure = { status: r.status, message: innerMessage || 'Booking failed', data: r.data };
-
-    // Only retry with another staff if the failure looks like a staff-availability issue.
-    const staffIssue = /not available|busy|unavailable|already booked|staff/i.test(innerMessage);
-    if (!staffIssue) {
-      console.log('[zoho/book] non-staff failure, aborting retry loop:', innerMessage);
-      break;
-    }
-    console.log('[zoho/book] staff', staffId, 'unavailable, trying next');
-  }
-
-  if (!rvSuccess) {
-    sendAlert('Booking failed', {
-      client: name,
-      mobile: `+${countryCode}${mobile}`,
-      track,
-      date,
-      slot,
-      zoho_message: lastFailure?.message || '(no message)'
-    }).catch(() => {});
-
-    return res.status(lastFailure?.status || 502).json({
-      error: lastFailure?.message || 'Booking failed',
-      details: lastFailure?.data
-    });
-  }
-
+  let r;
   try {
-    return res.status(200).json({
-      ok: true,
-      booking_id: rvSuccess.booking_id || rvSuccess.id || null,
-      staff_id: bookedStaffId,
-      summary_url: rvSuccess.summary_url || null,
-      raw: rvSuccess
-    });
+    r = await zohoPost('/bookings/v1/json/appointment', formBody);
   } catch (err) {
-    console.error('[zoho/book] error:', err.message);
+    console.error('[zoho/book] exception:', err.message);
     sendAlert('Booking crashed', {
       client: name,
       mobile: `+${countryCode}${mobile}`,
@@ -204,4 +124,36 @@ export default async function handler(req, res) {
     }).catch(() => {});
     return res.status(500).json({ error: err.message });
   }
+
+  console.log('[zoho/book] response status=', r.status, 'data=', JSON.stringify(r.data).slice(0, 600));
+
+  const rv = r.data?.response?.returnvalue || {};
+  const innerStatus = rv.status || r.data?.response?.status;
+  const innerMessage = rv.message || '';
+  const looksLikeFailure = innerStatus === 'failure' || /mandatory|invalid|error|not available|busy|unavailable/i.test(innerMessage);
+
+  if (!r.ok || looksLikeFailure) {
+    sendAlert('Booking failed', {
+      client: name,
+      mobile: `+${countryCode}${mobile}`,
+      track,
+      date,
+      slot,
+      zoho_message: innerMessage || '(no message)'
+    }).catch(() => {});
+
+    return res.status(r.status || 502).json({
+      error: innerMessage || 'Booking failed',
+      details: r.data
+    });
+  }
+
+  return res.status(200).json({
+    ok: true,
+    booking_id: rv.booking_id || rv.id || null,
+    staff_id: rv.staff_id || null,
+    staff_name: rv.staff_name || null,
+    summary_url: rv.summary_url || null,
+    raw: rv
+  });
 }
