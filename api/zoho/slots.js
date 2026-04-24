@@ -137,28 +137,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Attempt service-level query first
-    const serviceLevelSlots = await fetchServiceLevel();
-
-    // If service-level returned slots, short-circuit — every slot is available
-    // to all staff in the pool (Zoho auto-assigns)
-    if (serviceLevelSlots.length > 0) {
-      const sortedSlots = serviceLevelSlots
-        .sort((a, b) => timeToMinutes(a) - timeToMinutes(b))
-        .map(time => ({ time, staff_ids: STAFF_POOL }));
-      return res.status(200).json({
-        ok: true,
-        service_id: serviceId,
-        date: dateStr,
-        iso,
-        slots: sortedSlots,
-        ...(isDebug ? { debug: debugLog, mode: 'service_level' } : {})
-      });
-    }
-
-    // Fall back to per-staff union
-    const staffResults = await Promise.all(
-      STAFF_POOL.map(async (sid) => {
+    // Run service-level + all per-staff queries in parallel.
+    // Service-level is authoritative for "bookable" — it applies service window,
+    // blocked times, and one-booking-per-customer constraints that the per-staff
+    // availableslots endpoint silently ignores. Per-staff results are used only
+    // to identify which specific staff has each service-level slot, so book.js
+    // doesn't waste retries on staff who never had the slot.
+    const [serviceLevelSlots, ...staffResults] = await Promise.all([
+      fetchServiceLevel(),
+      ...STAFF_POOL.map(async (sid) => {
         try {
           const slots = await fetchSlotsForStaff(serviceId, sid, dateStr, debugLog);
           return { sid, slots };
@@ -168,19 +155,39 @@ export default async function handler(req, res) {
           return { sid, slots: [] };
         }
       })
-    );
+    ]);
 
-    const timeMap = new Map();
+    // If service-level returned nothing, there are genuinely no bookable slots
+    // that day. Do NOT fall back to a per-staff union — that surfaces slots
+    // Zoho will reject at booking time (which is what caused the spurious
+    // "Booking failed — slot not available" alerts in Apr 2026).
+    if (serviceLevelSlots.length === 0) {
+      return res.status(200).json({
+        ok: true,
+        service_id: serviceId,
+        date: dateStr,
+        iso,
+        slots: [],
+        ...(isDebug ? { debug: debugLog, mode: 'service_level_empty' } : {})
+      });
+    }
+
+    const staffBySlot = new Map();
     for (const { sid, slots } of staffResults) {
       for (const t of slots) {
-        if (!timeMap.has(t)) timeMap.set(t, []);
-        timeMap.get(t).push(sid);
+        if (!staffBySlot.has(t)) staffBySlot.set(t, []);
+        staffBySlot.get(t).push(sid);
       }
     }
 
-    const sortedSlots = Array.from(timeMap.entries())
-      .sort((a, b) => timeToMinutes(a[0]) - timeToMinutes(b[0]))
-      .map(([time, staff_ids]) => ({ time, staff_ids }));
+    const sortedSlots = serviceLevelSlots
+      .sort((a, b) => timeToMinutes(a) - timeToMinutes(b))
+      .map(time => ({
+        time,
+        // Staff who actually returned this slot. Fall back to full pool only
+        // if Zoho's per-staff data is inconsistent with service-level (rare).
+        staff_ids: staffBySlot.get(time) || STAFF_POOL
+      }));
 
     return res.status(200).json({
       ok: true,
@@ -188,7 +195,7 @@ export default async function handler(req, res) {
       date: dateStr,
       iso,
       slots: sortedSlots,
-      ...(isDebug ? { debug: debugLog, mode: 'per_staff_union' } : {})
+      ...(isDebug ? { debug: debugLog, mode: 'service_level_resolved' } : {})
     });
   } catch (err) {
     console.error('[zoho/slots] error:', err.message);
