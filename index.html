@@ -832,7 +832,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
       <span class="btn-text">Get OTP on WhatsApp</span>
     </button>
     <div class="otp-alt-wrap" id="otpAltWrap">
-      <span class="otp-alt-link disabled" id="emailOtpLink" onclick="showEmailOtp()">Don't have WhatsApp? Get OTP via email instead</span>
+      <span class="otp-alt-link" id="emailOtpLink" onclick="showEmailOtp()">Don't have WhatsApp? Get OTP via email instead</span>
     </div>
     <div class="email-otp-form" id="emailOtpForm" style="display:none">
       <p class="email-otp-hint">We'll send the OTP to your email. Your mobile is still used to identify your booking.</p>
@@ -1482,7 +1482,10 @@ function onMobInput() {
   var minLen = Math.max(5, expected - 1);
   var valid = val.length >= minLen && val.length <= 15;
   document.getElementById('sendBtn').disabled = !valid;
-  document.getElementById('emailOtpLink').classList.toggle('disabled', !valid);
+  // If the email form is open, re-evaluate its button (it depends on both fields).
+  if (document.getElementById('emailOtpForm').style.display === 'block') {
+    updateEmailOtpBtn();
+  }
   document.getElementById('mobError').classList.remove('show');
 }
 
@@ -1521,16 +1524,35 @@ async function sendOtp() {
 }
 
 function showEmailOtp() {
-  if (document.getElementById('emailOtpLink').classList.contains('disabled')) return;
   document.getElementById('emailOtpForm').style.display = 'block';
   document.getElementById('otpAltWrap').style.display = 'none';
-  setTimeout(function() { document.getElementById('otpEmail').focus(); }, 50);
+  updateEmailOtpBtn();
+  // Focus whichever field still needs filling. Mobile first if empty (since the
+  // hint above the email input tells the user it's required), otherwise email.
+  setTimeout(function() {
+    var mob = document.getElementById('mob').value.replace(/\D/g, '');
+    if (!mob) { document.getElementById('mob').focus(); return; }
+    document.getElementById('otpEmail').focus();
+  }, 50);
+}
+
+function isMobileValid() {
+  var val = document.getElementById('mob').value.replace(/\D/g, '');
+  var minLen = Math.max(5, getExpectedLen() - 1);
+  return val.length >= minLen && val.length <= 15;
+}
+
+function isOtpEmailValid() {
+  var email = document.getElementById('otpEmail').value.trim();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+}
+
+function updateEmailOtpBtn() {
+  document.getElementById('sendEmailBtn').disabled = !(isMobileValid() && isOtpEmailValid());
 }
 
 function onEmailOtpInput() {
-  var email = document.getElementById('otpEmail').value.trim();
-  var valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
-  document.getElementById('sendEmailBtn').disabled = !valid;
+  updateEmailOtpBtn();
   document.getElementById('emailOtpError').classList.remove('show');
 }
 
