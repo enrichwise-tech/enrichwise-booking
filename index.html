@@ -1711,15 +1711,30 @@ function pickCorpus(el, corpus, track, label) {
   document.getElementById('corpusBtn').disabled = false;
 }
 
+function focusFirstEmpty(ids) {
+  for (var i = 0; i < ids.length; i++) {
+    var el = document.getElementById(ids[i]);
+    if (el && !el.value) { el.focus(); return; }
+  }
+  var first = document.getElementById(ids[0]);
+  if (first) first.focus();
+}
+
 function goBooking() {
   trackEvent('corpus_selected', { corpus: state.corpusLabel });
   if (state.track === 'gbp') {
     go('s2b');
-    setTimeout(function() { document.getElementById('gbpName').focus(); }, 100);
+    if (state.name)  document.getElementById('gbpName').value  = state.name;
+    if (state.email) document.getElementById('gbpEmail').value = state.email;
+    onGbpInput();
+    setTimeout(function() { focusFirstEmpty(['gbpName', 'gbpEmail']); }, 100);
     return;
   }
   go('s3');
-  setTimeout(function() { document.getElementById('fName').focus(); }, 100);
+  if (state.name)  document.getElementById('fName').value  = state.name;
+  if (state.email) document.getElementById('fEmail').value = state.email;
+  onDetailsInput();
+  setTimeout(function() { focusFirstEmpty(['fName', 'fEmail']); }, 100);
 }
 
 /* ── Step 3B: GBP interstitial ── */
