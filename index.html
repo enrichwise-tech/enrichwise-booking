@@ -1612,6 +1612,11 @@ function otpPaste(e) {
   var last = Math.min(data.length, 6) - 1;
   boxes[Math.max(0, last)].focus();
   document.getElementById('verBtn').disabled = data.length < 6;
+  // Auto-verify on a complete paste (matches the typed-flow behaviour in otpType).
+  // Email OTP users are especially likely to copy-paste the code from their inbox.
+  if (data.length === 6) {
+    setTimeout(function() { verifyOtp(); }, 150);
+  }
 }
 
 function getBoxes() {
