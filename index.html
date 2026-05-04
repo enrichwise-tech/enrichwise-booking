@@ -491,23 +491,27 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .cal-nav:disabled { opacity: 0.35; cursor: not-allowed; }
 .cal-nav:disabled:hover { border-color: var(--border); color: var(--ink-2); }
 .cal-dow {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px;
   font-size: 11px; font-weight: 600; color: var(--ink-3);
   text-align: center; margin-bottom: 6px;
 }
 .cal-dow span { padding: 4px 0; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .cal-day {
+  width: 100%; min-width: 0;
   aspect-ratio: 1;
   display: flex; align-items: center; justify-content: center;
   font-size: 13px; color: var(--ink); border-radius: 8px;
   border: 1px solid transparent; background: transparent;
   cursor: pointer; transition: all 0.12s; font-family: inherit;
+  padding: 0;
 }
 .cal-day:hover:not(:disabled):not(.sel) { background: var(--brand-light); border-color: var(--brand-light); }
 .cal-day.sel { background: var(--brand); color: #fff; font-weight: 600; }
 .cal-day:disabled { color: var(--ink-3); cursor: not-allowed; opacity: 0.4; }
 .cal-day.empty { visibility: hidden; cursor: default; }
+.cal-day.no-slots { color: var(--ink-3); opacity: 0.45; }
+.cal-day.no-slots:hover:not(.sel) { background: transparent; border-color: transparent; }
 .cal-day.today { font-weight: 700; }
 .cal-day.today:not(.sel)::after {
   content: ''; position: absolute; width: 4px; height: 4px; border-radius: 50%;
@@ -1845,15 +1849,48 @@ async function submitDetails() {
 /* ── Step 5: Calendar + slot picker ── */
 var calView = null; // { year, month }  (month 0-indexed)
 var calMonthsAhead = 2; // how far forward user can navigate from current month
+// Cached availability map { "YYYY-MM-DD": true|false } from /api/zoho/slots?summary=1.
+// Populated by prefetchAvailability() once per loadSlots() call so the calendar
+// can grey out empty dates and auto-jump to the soonest open one.
+state.availabilityMap = null;
 
 function loadSlots() {
   state.slotDate = ''; state.slotDateIso = ''; state.slotTime = ''; state.slotStaffIds = [];
+  state.availabilityMap = null;
   document.getElementById('slotBtn').disabled = true;
   document.getElementById('slotsError').classList.remove('show');
-  document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">Select a date to see available times.</div>';
+  document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">Loading availability...</div>';
   var now = new Date();
   calView = { year: now.getFullYear(), month: now.getMonth() };
   renderCalendar();
+  prefetchAvailability();
+}
+
+async function prefetchAvailability() {
+  try {
+    var url = API_BASE + '/api/zoho/slots?track=' + encodeURIComponent(state.track) + '&summary=1';
+    var res = await fetch(url);
+    var data = await res.json();
+    if (!res.ok || !data.ok || !Array.isArray(data.dates)) return;
+    var map = {};
+    data.dates.forEach(function(d) { map[d.iso] = !!d.has_slots; });
+    state.availabilityMap = map;
+    renderCalendar(); // re-render so empty days get the .no-slots class
+
+    // Auto-jump to the soonest open date so the client lands on real slots
+    // instead of having to hunt. Skip if user already picked something.
+    if (!state.slotDateIso) {
+      var firstOpen = data.dates.find(function(d) { return d.has_slots; });
+      if (firstOpen) {
+        selectDate(firstOpen.iso);
+      } else {
+        document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">No availability in the next 15 days. Please contact us.</div>';
+      }
+    }
+  } catch (err) {
+    // Silent fail — calendar still works without the map (back to manual hunting).
+    console.warn('[prefetchAvailability] failed:', err && err.message);
+  }
 }
 
 function renderCalendar() {
@@ -1887,9 +1924,15 @@ function renderCalendar() {
     var past = dt.getTime() < now.getTime();
     var isToday = dt.getTime() === now.getTime();
     var selected = state.slotDateIso === iso;
+    // Only mark .no-slots when we have authoritative summary data AND the day
+    // is explicitly known to have zero slots. Days outside the 15-day summary
+    // window (state.availabilityMap[iso] === undefined) stay normal so the
+    // user can still click them — Zoho will tell them no slots after.
+    var hasNoSlots = state.availabilityMap && state.availabilityMap[iso] === false;
     var cls = 'cal-day';
     if (isToday) cls += ' today';
     if (selected) cls += ' sel';
+    if (hasNoSlots && !selected) cls += ' no-slots';
     html += '<button class="' + cls + '"'
       + (past ? ' disabled' : '')
       + ' data-iso="' + iso + '"'
