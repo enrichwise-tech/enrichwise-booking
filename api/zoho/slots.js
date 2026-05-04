@@ -90,7 +90,41 @@ async function fetchTimes(serviceId, dateStr) {
   const times = raw
     .map(s => (typeof s === 'string' ? s.trim() : (s?.time || s?.from_time || '')))
     .filter(s => timePattern.test(s));
-  return { ok: true, times, raw: r.data };
+  return { ok: true, times: applyOneHourCutoff(times, dateStr), raw: r.data };
+}
+
+// Drop any slot that isn't strictly more than 1 hour away in IST.
+// Zoho's REST API only enforces >= 1 hour (the configured Minimum Booking
+// Notice), but Zoho's own widget is stricter and excludes slots exactly at
+// the 1-hour boundary. This filter aligns our app with the widget behaviour.
+const MONTH_NAME_TO_NUM = { Jan:1, Feb:2, Mar:3, Apr:4, May:5, Jun:6, Jul:7, Aug:8, Sep:9, Oct:10, Nov:11, Dec:12 };
+function applyOneHourCutoff(times, dateStr) {
+  const m = String(dateStr).match(/^(\d{1,2})-(\w{3})-(\d{4})$/);
+  if (!m) return times;
+  const [, dStr, monStr, yStr] = m;
+  const mo = MONTH_NAME_TO_NUM[monStr];
+  if (!mo) return times;
+  const y = yStr;
+  const d = pad2(dStr);
+  const moStr = pad2(mo);
+
+  const thresholdMs = Date.now() + 60 * 60 * 1000; // now + 1 hour, in UTC ms
+
+  return times.filter(t => {
+    const tm = t.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)?$/i);
+    if (!tm) return true;
+    let hh = parseInt(tm[1], 10);
+    const mm = parseInt(tm[2], 10);
+    const mer = (tm[3] || '').toUpperCase();
+    if (mer === 'PM' && hh < 12) hh += 12;
+    if (mer === 'AM' && hh === 12) hh = 0;
+    // Slot is in IST (Asia/Calcutta = UTC+5:30). Build an ISO string with the
+    // explicit offset so Date.parse converts it to a correct UTC ms timestamp.
+    const iso = `${y}-${moStr}-${d}T${pad2(hh)}:${pad2(mm)}:00+05:30`;
+    const slotMs = Date.parse(iso);
+    if (isNaN(slotMs)) return true;
+    return slotMs > thresholdMs;
+  });
 }
 
 export default async function handler(req, res) {
