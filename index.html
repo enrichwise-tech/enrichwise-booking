@@ -491,12 +491,12 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .cal-nav:disabled { opacity: 0.35; cursor: not-allowed; }
 .cal-nav:disabled:hover { border-color: var(--border); color: var(--ink-2); }
 .cal-dow {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px;
   font-size: 11px; font-weight: 600; color: var(--ink-3);
   text-align: center; margin-bottom: 6px;
 }
 .cal-dow span { padding: 4px 0; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .cal-day {
   aspect-ratio: 1;
   display: flex; align-items: center; justify-content: center;
