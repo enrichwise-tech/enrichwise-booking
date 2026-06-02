@@ -261,6 +261,8 @@ body {
 .back:hover { color: var(--ink); }
 h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4px; margin-bottom: 6px; line-height: 1.25; }
 .sub { font-size: 14px; color: var(--ink-2); line-height: 1.6; margin-bottom: 1.75rem; }
+.tz-note { font-size: 12px; color: var(--ink-3); margin-top: -1.4rem; margin-bottom: 1.4rem; }
+.tz-note:empty { display: none; }
 
 /* Phone */
 .phone-row {
@@ -1007,6 +1009,7 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
     </button>
     <h1>Pick a slot</h1>
     <p class="sub">Real-time availability.</p>
+    <p class="sub tz-note" id="tzNote"></p>
 
     <div class="cal-wrap">
       <div class="cal-head">
@@ -1861,8 +1864,33 @@ function loadSlots() {
   document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">Loading availability...</div>';
   var now = new Date();
   calView = { year: now.getFullYear(), month: now.getMonth() };
+  showTimezoneNote();
   renderCalendar();
   prefetchAvailability();
+}
+
+function showTimezoneNote() {
+  var note = document.getElementById('tzNote');
+  if (!note) return;
+  var tz = '';
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+  // Indian users — slots are already in their local time, no friction.
+  if (tz === 'Asia/Calcutta' || tz === 'Asia/Kolkata' || !tz) {
+    note.textContent = 'All times shown in IST (Indian Standard Time).';
+    return;
+  }
+  // Non-Indian users — show their timezone plus offset from IST so they can
+  // mentally convert. IST is UTC+5:30 = 330 minutes ahead of UTC.
+  var userOffsetMin = -new Date().getTimezoneOffset(); // browser TZ offset vs UTC
+  var diffMin = 330 - userOffsetMin; // minutes IST is ahead of user
+  var sign = diffMin >= 0 ? '+' : '-';
+  var abs = Math.abs(diffMin);
+  var h = Math.floor(abs / 60);
+  var m = abs % 60;
+  var diffStr = sign + h + 'h' + (m ? ' ' + m + 'm' : '');
+  // Human-readable TZ — strip the region prefix for compactness
+  var prettyTz = tz.indexOf('/') > -1 ? tz.split('/').slice(1).join('/').replace(/_/g, ' ') : tz;
+  note.textContent = 'All times shown in IST (Indian Standard Time). Your timezone: ' + prettyTz + ' (IST ' + diffStr + ').';
 }
 
 async function prefetchAvailability() {
