@@ -396,6 +396,13 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 }
 .slot:hover { border-color: var(--brand); color: var(--brand); }
 .slot.sel { background: var(--brand); border-color: var(--brand); color: #fff; }
+/* Dual-display variant for non-IST users — local time prominent, IST below */
+.slot.slot-dual { padding: 8px 6px; line-height: 1.2; }
+.slot-local { display: block; font-size: 14px; font-weight: 600; }
+.slot-day-tag { font-size: 10px; font-weight: 500; color: var(--ink-3); margin-left: 3px; }
+.slot.sel .slot-day-tag { color: rgba(255,255,255,0.85); }
+.slot-ist { display: block; font-size: 10px; font-weight: 400; color: var(--ink-3); margin-top: 3px; letter-spacing: 0.3px; }
+.slot.sel .slot-ist { color: rgba(255,255,255,0.85); }
 
 /* Advisor strip */
 .advisor {
@@ -1869,28 +1876,50 @@ function loadSlots() {
   prefetchAvailability();
 }
 
+function getUserTz() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
+}
+
+function isIstUser() {
+  var tz = getUserTz();
+  return !tz || tz === 'Asia/Calcutta' || tz === 'Asia/Kolkata';
+}
+
 function showTimezoneNote() {
   var note = document.getElementById('tzNote');
   if (!note) return;
-  var tz = '';
-  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
-  // Indian users — slots are already in their local time, no friction.
-  if (tz === 'Asia/Calcutta' || tz === 'Asia/Kolkata' || !tz) {
+  if (isIstUser()) {
     note.textContent = 'All times shown in IST (Indian Standard Time).';
     return;
   }
-  // Non-Indian users — show their timezone plus offset from IST so they can
-  // mentally convert. IST is UTC+5:30 = 330 minutes ahead of UTC.
-  var userOffsetMin = -new Date().getTimezoneOffset(); // browser TZ offset vs UTC
-  var diffMin = 330 - userOffsetMin; // minutes IST is ahead of user
-  var sign = diffMin >= 0 ? '+' : '-';
-  var abs = Math.abs(diffMin);
-  var h = Math.floor(abs / 60);
-  var m = abs % 60;
-  var diffStr = sign + h + 'h' + (m ? ' ' + m + 'm' : '');
-  // Human-readable TZ — strip the region prefix for compactness
+  var tz = getUserTz();
+  // Non-Indian users — slot times will be converted to their local timezone
+  // in renderDaySlots; tell them so they know IST is the underlying reference.
   var prettyTz = tz.indexOf('/') > -1 ? tz.split('/').slice(1).join('/').replace(/_/g, ' ') : tz;
-  note.textContent = 'All times shown in IST (Indian Standard Time). Your timezone: ' + prettyTz + ' (IST ' + diffStr + ').';
+  note.textContent = 'Times shown in your timezone (' + prettyTz + '). The appointment is scheduled in India (IST).';
+}
+
+// Convert an IST slot like "11:15 AM" on an ISO date to the user's local
+// timezone. Returns { local: "1:45 AM", dayTag: "" or "+1d" / "-1d" }.
+function convertIstSlotToLocal(istTimeStr, isoDate) {
+  var tm = String(istTimeStr).match(/^(\d{1,2}):(\d{2})\s?(AM|PM)?$/i);
+  if (!tm || !isoDate) return null;
+  var hh = parseInt(tm[1], 10);
+  var mm = parseInt(tm[2], 10);
+  var mer = (tm[3] || '').toUpperCase();
+  if (mer === 'PM' && hh < 12) hh += 12;
+  if (mer === 'AM' && hh === 12) hh = 0;
+  // IST is UTC+5:30 — build an ISO string with the explicit offset.
+  var iso = isoDate + 'T' + pad2(hh) + ':' + pad2(mm) + ':00+05:30';
+  var dt = new Date(iso);
+  if (isNaN(dt.getTime())) return null;
+  var local = dt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+  // Detect if the local date differs from the IST date the user clicked.
+  var localYmd = dt.getFullYear() + '-' + pad2(dt.getMonth() + 1) + '-' + pad2(dt.getDate());
+  var dayTag = '';
+  if (localYmd > isoDate) dayTag = ' +1d';
+  else if (localYmd < isoDate) dayTag = ' -1d';
+  return { local: local, dayTag: dayTag };
 }
 
 async function prefetchAvailability() {
@@ -2020,14 +2049,30 @@ function renderDaySlots(zohoDate, slots) {
     if (typeof s === 'string') return { time: s, staff_ids: [] };
     return { time: s.time || s.from_time || s.slot || '', staff_ids: Array.isArray(s.staff_ids) ? s.staff_ids : [] };
   }).filter(function(s) { return s.time; });
-  var html = '<div class="cal-slots-label">' + escapeHtml(niceDate) + '</div><div class="slot-grid">';
+  var foreign = !isIstUser();
+  var html = '<div class="cal-slots-label">' + escapeHtml(niceDate) + (foreign ? ' (IST)' : '') + '</div><div class="slot-grid">';
   normalized.forEach(function(s) {
-    html += '<button class="slot"'
+    var label;
+    var btnClass = 'slot';
+    if (foreign) {
+      var conv = convertIstSlotToLocal(s.time, state.slotDateIso);
+      if (conv) {
+        btnClass = 'slot slot-dual';
+        label = '<span class="slot-local">' + escapeHtml(conv.local)
+          + (conv.dayTag ? '<span class="slot-day-tag">' + escapeHtml(conv.dayTag) + '</span>' : '')
+          + '</span><span class="slot-ist">' + escapeHtml(s.time) + ' IST</span>';
+      } else {
+        label = escapeHtml(s.time);
+      }
+    } else {
+      label = escapeHtml(s.time);
+    }
+    html += '<button class="' + btnClass + '"'
       + ' data-date="' + escapeHtml(zohoDate || '') + '"'
       + ' data-iso="' + escapeHtml(state.slotDateIso) + '"'
       + ' data-time="' + escapeHtml(s.time) + '"'
       + ' data-staff="' + escapeHtml(s.staff_ids.join(',')) + '"'
-      + ' onclick="pickSlot(this)">' + escapeHtml(s.time) + '</button>';
+      + ' onclick="pickSlot(this)">' + label + '</button>';
   });
   html += '</div>';
   panel.innerHTML = html;
