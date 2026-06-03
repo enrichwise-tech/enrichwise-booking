@@ -1894,9 +1894,9 @@ function showTimezoneNote() {
   }
   var tz = getUserTz();
   // Non-Indian users — slot times will be converted to their local timezone
-  // in renderDaySlots; tell them so they know IST is the underlying reference.
+  // in renderDaySlots; the IST equivalent shows below each slot.
   var prettyTz = tz.indexOf('/') > -1 ? tz.split('/').slice(1).join('/').replace(/_/g, ' ') : tz;
-  note.textContent = 'Times shown in your timezone (' + prettyTz + '). The appointment is scheduled in India (IST).';
+  note.textContent = 'Showing times in your local timezone (' + prettyTz + ').';
 }
 
 // Convert an IST slot like "11:15 AM" on an ISO date to the user's local
@@ -2050,7 +2050,7 @@ function renderDaySlots(zohoDate, slots) {
     return { time: s.time || s.from_time || s.slot || '', staff_ids: Array.isArray(s.staff_ids) ? s.staff_ids : [] };
   }).filter(function(s) { return s.time; });
   var foreign = !isIstUser();
-  var html = '<div class="cal-slots-label">' + escapeHtml(niceDate) + (foreign ? ' (IST)' : '') + '</div><div class="slot-grid">';
+  var html = '<div class="cal-slots-label">' + escapeHtml(niceDate) + '</div><div class="slot-grid">';
   normalized.forEach(function(s) {
     var label;
     var btnClass = 'slot';
