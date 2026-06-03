@@ -445,6 +445,8 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
 .conf-row:last-child { border-bottom: none; }
 .conf-key { color: var(--ink-3); }
 .conf-val { font-weight: 600; color: var(--ink); text-align: right; }
+.conf-tz-tag { font-size: 11px; font-weight: 500; color: var(--ink-3); margin-left: 4px; }
+.conf-ist { display: block; font-size: 12px; font-weight: 500; color: var(--ink-3); margin-top: 2px; }
 .wa-btn {
   width: 100%; padding: 13px; border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface); font-size: 14px; font-weight: 500; color: var(--ink);
@@ -2121,7 +2123,7 @@ async function bookAppointment() {
     document.getElementById('cName').textContent    = state.name;
     document.getElementById('cMobile').textContent  = '+' + state.cc + ' ' + state.mob;
     document.getElementById('cService').textContent = SERVICE_NAME;
-    document.getElementById('cWhen').textContent    = state.slotDate + ' · ' + state.slotTime;
+    setConfirmationWhen();
     document.getElementById('cMode').textContent    = state.mode || '—';
     trackEvent('booking_created', { date: state.slotDate, slot: state.slotTime, booking_id: (data && data.booking_id) || null });
     go('s5');
@@ -2130,6 +2132,38 @@ async function bookAppointment() {
     document.getElementById('slotsError').classList.add('show');
   }
   setLoading('slotBtn', false);
+}
+
+// Populate the "Date & time" row on the confirmation screen. IST users get
+// the plain IST display; non-IST users get their local datetime as the
+// primary line, with the IST equivalent below as reference (matches the
+// slot-picker layout so they see consistent info on the booking they made).
+function setConfirmationWhen() {
+  var slotIstDate = state.slotDate || '';   // e.g. "16-Jun-2026"
+  var slotIstTime = state.slotTime || '';   // e.g. "05:30 PM"
+  var slotIsoDate = state.slotDateIso || '';// e.g. "2026-06-16"
+  var cell = document.getElementById('cWhen');
+  if (!cell) return;
+  if (isIstUser() || !slotIsoDate) {
+    cell.textContent = slotIstDate + ' · ' + slotIstTime;
+    return;
+  }
+  var tm = slotIstTime.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)?$/i);
+  if (!tm) { cell.textContent = slotIstDate + ' · ' + slotIstTime; return; }
+  var hh = parseInt(tm[1], 10), mm = parseInt(tm[2], 10);
+  var mer = (tm[3] || '').toUpperCase();
+  if (mer === 'PM' && hh < 12) hh += 12;
+  if (mer === 'AM' && hh === 12) hh = 0;
+  var dt = new Date(slotIsoDate + 'T' + pad2(hh) + ':' + pad2(mm) + ':00+05:30');
+  if (isNaN(dt.getTime())) { cell.textContent = slotIstDate + ' · ' + slotIstTime; return; }
+  var localTime = dt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+  // Build a "16-Jun-2026" style date string in the user's local timezone.
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var localDate = pad2(dt.getDate()) + '-' + months[dt.getMonth()] + '-' + dt.getFullYear();
+  cell.innerHTML =
+    escapeHtml(localDate) + ' · ' + escapeHtml(localTime)
+    + '<span class="conf-tz-tag">your time</span>'
+    + '<span class="conf-ist">' + escapeHtml(slotIstDate) + ' · ' + escapeHtml(slotIstTime) + ' IST</span>';
 }
 
 function escapeHtml(s) {
