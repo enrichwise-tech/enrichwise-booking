@@ -89,13 +89,19 @@ export default async function handler(req, res) {
     phone_number: `+${countryCode}${mobile}`
   };
 
+  // Defensive truncation — Zoho's custom text fields have character caps and
+  // reject the whole booking when exceeded ("Character limit exceeded"). The
+  // frontend has maxlength=100 on the platform input but cached old clients
+  // or direct API callers might still send longer values.
+  const truncate = (v, n) => String(v || '').trim().slice(0, n);
+
   const additionalFields = {
     'I want to discuss': topicsArr.join(', '),
     'Preferred mode': mode || '',
-    'Which platform are you currently using for Investments': platform || ''
+    'Which platform are you currently using for Investments': truncate(platform, 100)
   };
   if (query && String(query).trim()) {
-    additionalFields['Please describe your query in brief'] = String(query).trim();
+    additionalFields['Please describe your query in brief'] = truncate(query, 500);
   }
 
   const formBody = {
