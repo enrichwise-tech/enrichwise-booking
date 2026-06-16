@@ -65,14 +65,62 @@ async function refreshAccessToken() {
   return data.access_token;
 }
 
+// Distributed lock around the OAuth token refresh. Without it, multiple
+// Vercel function instances hitting an expired cache simultaneously each
+// independently refresh against accounts.zoho.in, blowing through Zoho's
+// 30/hour OAuth rate limit and triggering "Access Denied" 400s. With it,
+// only ONE instance refreshes per cycle; the rest wait and re-read the
+// cache that the winning instance writes.
+const LOCK_KEY = 'zoho:refresh_lock';
+const LOCK_TTL_SEC = 15;        // max refresh duration before we let others retry
+const WAIT_POLL_MS = 200;       // how often to re-check cache while waiting
+const WAIT_MAX_ATTEMPTS = 10;   // total ~2s wait before giving up and refreshing ourselves
+
 export async function getAccessToken() {
+  // 1. Try cache first — happy path, no contention
+  let redis;
   try {
-    const redis = getRedis();
+    redis = getRedis();
     const cached = await redis.get(TOKEN_KEY);
     if (cached) return cached;
   } catch (err) {
     console.warn('[zoho] cache read failed, refreshing directly:', err.message);
+    return refreshAccessToken();
   }
+
+  // 2. Cache miss — try to acquire the refresh lock
+  let lockAcquired = false;
+  try {
+    const ok = await redis.set(LOCK_KEY, String(Date.now()), { nx: true, ex: LOCK_TTL_SEC });
+    lockAcquired = !!ok;
+  } catch (err) {
+    // Lock infra broken — fall through to direct refresh, accepting some
+    // risk of double-refresh rather than blocking all bookings.
+    console.warn('[zoho] lock acquire failed, refreshing directly:', err.message);
+    return refreshAccessToken();
+  }
+
+  if (lockAcquired) {
+    // 3a. We own the refresh — do it, then release
+    try {
+      return await refreshAccessToken();
+    } finally {
+      try { await redis.del(LOCK_KEY); } catch {}
+    }
+  }
+
+  // 3b. Another instance is refreshing — poll cache for the new token
+  for (let i = 0; i < WAIT_MAX_ATTEMPTS; i++) {
+    await new Promise(r => setTimeout(r, WAIT_POLL_MS));
+    try {
+      const cached = await redis.get(TOKEN_KEY);
+      if (cached) return cached;
+    } catch {}
+  }
+
+  // 4. Lock holder didn't finish in time (e.g. crashed) — refresh ourselves
+  // as a fallback. The lock will auto-expire via its TTL.
+  console.warn('[zoho] lock holder timed out, refreshing as fallback');
   return refreshAccessToken();
 }
 
