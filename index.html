@@ -1973,6 +1973,11 @@ function renderCalendar() {
   var firstDow = (firstDay.getDay() + 6) % 7;
   var daysInMonth = new Date(calView.year, calView.month + 1, 0).getDate();
 
+  // Beyond Zoho's 15-day Maximum Booking Notice window — every such date is
+  // unbookable regardless of slot availability, so we grey them out too.
+  var bookingHorizon = new Date(now);
+  bookingHorizon.setDate(bookingHorizon.getDate() + 15);
+
   var html = '';
   for (var i = 0; i < firstDow; i++) html += '<div class="cal-day empty"></div>';
   for (var d = 1; d <= daysInMonth; d++) {
@@ -1982,11 +1987,12 @@ function renderCalendar() {
     var past = dt.getTime() < now.getTime();
     var isToday = dt.getTime() === now.getTime();
     var selected = state.slotDateIso === iso;
-    // Only mark .no-slots when we have authoritative summary data AND the day
-    // is explicitly known to have zero slots. Days outside the 15-day summary
-    // window (state.availabilityMap[iso] === undefined) stay normal so the
-    // user can still click them — Zoho will tell them no slots after.
-    var hasNoSlots = state.availabilityMap && state.availabilityMap[iso] === false;
+    // Two ways a non-past date can be unbookable:
+    //  1. Summary endpoint explicitly says no slots for it (within 15-day window)
+    //  2. It's beyond the 15-day booking horizon (Zoho won't accept it)
+    var noSlotsPerSummary = state.availabilityMap && state.availabilityMap[iso] === false;
+    var beyondHorizon = dt.getTime() > bookingHorizon.getTime();
+    var hasNoSlots = noSlotsPerSummary || beyondHorizon;
     var cls = 'cal-day';
     if (isToday) cls += ' today';
     if (selected) cls += ' sel';
