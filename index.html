@@ -1985,16 +1985,11 @@ function renderCalendar() {
   var firstDow = (firstDay.getDay() + 6) % 7;
   var daysInMonth = new Date(calView.year, calView.month + 1, 0).getDate();
 
-  // Beyond Zoho's Maximum Booking Notice window — every such date is
-  // unbookable regardless of slot availability, so we grey them out too.
-  // Horizon is set from the backend's fetchservice result (state.bookingHorizonDays),
-  // which auto-detects config changes in Zoho admin. Falls back to 15 if the
-  // summary hasn't returned yet or the backend didn't include it.
-  var horizonDays = (typeof state.bookingHorizonDays === 'number' && state.bookingHorizonDays > 0)
-    ? state.bookingHorizonDays
-    : 15;
-  var bookingHorizon = new Date(now);
-  bookingHorizon.setDate(bookingHorizon.getDate() + horizonDays);
+  // Beyond the summary window — the backend fetches availability for exactly
+  // Zoho's Max Booking Notice range. Any future date NOT present in the
+  // summary map is beyond that range and therefore unbookable, so we grey
+  // it out. Using the map's own keys as the source of truth avoids off-by-
+  // one issues with any separate horizon calculation.
 
   var html = '';
   for (var i = 0; i < firstDow; i++) html += '<div class="cal-day empty"></div>';
@@ -2006,10 +2001,10 @@ function renderCalendar() {
     var isToday = dt.getTime() === now.getTime();
     var selected = state.slotDateIso === iso;
     // Two ways a non-past date can be unbookable:
-    //  1. Summary endpoint explicitly says no slots for it (within 15-day window)
-    //  2. It's beyond the 15-day booking horizon (Zoho won't accept it)
+    //  1. Summary endpoint explicitly says no slots for it (within window)
+    //  2. It's beyond the summary window (not present in the map) — Zoho won't accept it
     var noSlotsPerSummary = state.availabilityMap && state.availabilityMap[iso] === false;
-    var beyondHorizon = dt.getTime() > bookingHorizon.getTime();
+    var beyondHorizon = state.availabilityMap && !(iso in state.availabilityMap) && dt.getTime() > now.getTime();
     var hasNoSlots = noSlotsPerSummary || beyondHorizon;
     var cls = 'cal-day';
     if (isToday) cls += ' today';
