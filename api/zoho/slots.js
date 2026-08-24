@@ -39,10 +39,61 @@
  *   }
  */
 import { zohoGet } from './_client.js';
+import { getRedis } from '../_redis.js';
 
 const DEFAULT_INSTANT_SVC  = '279048000000733018'; // Private consultation (Online)
 const DEFAULT_CALLBACK_SVC = '279048000000841186'; // unused (under-1Cr routes to Zoho Form)
-const SUMMARY_DAYS         = 15; // matches Zoho service "Maximum Booking Notice"
+const FALLBACK_SUMMARY_DAYS = 30; // used only if Zoho fetchservice fails; safely covers common Max Booking Notice values
+const MAX_SUMMARY_DAYS = 90;      // hard ceiling to protect against runaway Zoho configs / API calls
+
+// Fetch the service's configured Maximum Booking Notice from Zoho and cache
+// it in Upstash for 1 hour. Auto-detects when the user changes the value
+// in Zoho admin, so the frontend calendar horizon stays in sync without
+// requiring a code deploy.
+async function getMaxNoticeDays(serviceId) {
+  const cacheKey = `zoho:svc_maxnotice:${serviceId}`;
+  try {
+    const redis = getRedis();
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      const n = parseInt(cached, 10);
+      if (n > 0) return Math.min(n, MAX_SUMMARY_DAYS);
+    }
+  } catch {}
+
+  try {
+    const r = await zohoGet('/bookings/v1/json/fetchservice', { service_id: serviceId });
+    if (r.ok) {
+      // Zoho's field name has varied across API versions — try the common
+      // possibilities in order of likelihood.
+      const rv = r.data?.response?.returnvalue || {};
+      const candidates = [
+        rv.max_advance_booking_notice,
+        rv.max_advance_booking,
+        rv.max_notice,
+        rv.booking_notice,
+        rv.max_booking_notice,
+        rv.advance_booking_days
+      ];
+      for (const c of candidates) {
+        // Values may be numbers or strings like "18" / "18 days" / "18d"
+        const parsed = parseInt(String(c || ''), 10);
+        if (parsed > 0) {
+          const capped = Math.min(parsed, MAX_SUMMARY_DAYS);
+          try {
+            const redis = getRedis();
+            await redis.set(cacheKey, String(capped), { ex: 3600 });
+          } catch {}
+          return capped;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[zoho/slots] fetchservice failed for max notice:', err.message);
+  }
+
+  return FALLBACK_SUMMARY_DAYS;
+}
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -150,13 +201,18 @@ export default async function handler(req, res) {
   // ── Summary mode ──────────────────────────────────────────────────────────
   if (isSummary) {
     try {
-      // Generate ISO dates for today + next (SUMMARY_DAYS - 1) days. Today is
+      // Ask Zoho what its Maximum Booking Notice is (cached 1hr in Redis).
+      // Auto-detects config changes in Zoho admin — no code deploy needed
+      // when the horizon is bumped from 15 to 18 to 30 days etc.
+      const maxDays = await getMaxNoticeDays(serviceId);
+
+      // Generate ISO dates for today + next (maxDays - 1) days. Today is
       // included because Zoho's minBookingNotice is short (1 hr) — same-day
       // slots can still be available later in the day.
       const today = new Date();
       today.setUTCHours(0, 0, 0, 0);
       const items = [];
-      for (let i = 0; i < SUMMARY_DAYS; i++) {
+      for (let i = 0; i < maxDays; i++) {
         const d = new Date(today);
         d.setUTCDate(d.getUTCDate() + i);
         const isoStr = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
@@ -177,6 +233,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         service_id: serviceId,
+        max_days: maxDays,      // frontend uses this for the calendar horizon
         dates: results
       });
     } catch (err) {

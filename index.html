@@ -1864,10 +1864,15 @@ var calMonthsAhead = 2; // how far forward user can navigate from current month
 // Populated by prefetchAvailability() once per loadSlots() call so the calendar
 // can grey out empty dates and auto-jump to the soonest open one.
 state.availabilityMap = null;
+// Zoho's Max Booking Notice in days, learned from the summary endpoint per
+// loadSlots call. Frontend uses it for the calendar's beyond-horizon greyout
+// so no code change is needed when the value is updated in Zoho admin.
+state.bookingHorizonDays = null;
 
 function loadSlots() {
   state.slotDate = ''; state.slotDateIso = ''; state.slotTime = ''; state.slotStaffIds = [];
   state.availabilityMap = null;
+  state.bookingHorizonDays = null;
   document.getElementById('slotBtn').disabled = true;
   document.getElementById('slotsError').classList.remove('show');
   document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">Loading availability...</div>';
@@ -1933,6 +1938,12 @@ async function prefetchAvailability() {
     var map = {};
     data.dates.forEach(function(d) { map[d.iso] = !!d.has_slots; });
     state.availabilityMap = map;
+    // Backend tells us the current Zoho Maximum Booking Notice — use it so
+    // the calendar's beyond-horizon greyout stays in sync automatically when
+    // the setting is changed in Zoho admin.
+    if (typeof data.max_days === 'number' && data.max_days > 0) {
+      state.bookingHorizonDays = data.max_days;
+    }
     renderCalendar(); // re-render so empty days get the .no-slots class
 
     // Auto-jump to the soonest open date so the client lands on real slots
@@ -1942,7 +1953,8 @@ async function prefetchAvailability() {
       if (firstOpen) {
         selectDate(firstOpen.iso);
       } else {
-        document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">No availability in the next 15 days. Please contact us.</div>';
+        var horizonMsg = 'No availability in the next ' + (state.bookingHorizonDays || 15) + ' days. Please contact us.';
+        document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">' + horizonMsg + '</div>';
       }
     }
   } catch (err) {
@@ -1973,10 +1985,16 @@ function renderCalendar() {
   var firstDow = (firstDay.getDay() + 6) % 7;
   var daysInMonth = new Date(calView.year, calView.month + 1, 0).getDate();
 
-  // Beyond Zoho's 15-day Maximum Booking Notice window — every such date is
+  // Beyond Zoho's Maximum Booking Notice window — every such date is
   // unbookable regardless of slot availability, so we grey them out too.
+  // Horizon is set from the backend's fetchservice result (state.bookingHorizonDays),
+  // which auto-detects config changes in Zoho admin. Falls back to 15 if the
+  // summary hasn't returned yet or the backend didn't include it.
+  var horizonDays = (typeof state.bookingHorizonDays === 'number' && state.bookingHorizonDays > 0)
+    ? state.bookingHorizonDays
+    : 15;
   var bookingHorizon = new Date(now);
-  bookingHorizon.setDate(bookingHorizon.getDate() + 15);
+  bookingHorizon.setDate(bookingHorizon.getDate() + horizonDays);
 
   var html = '';
   for (var i = 0; i < firstDow; i++) html += '<div class="cal-day empty"></div>';
