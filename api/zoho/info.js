@@ -31,6 +31,15 @@ export default async function handler(req, res) {
   }
 
   try {
+    // If ?service_id=... is passed, return the raw fetchservice response so we
+    // can inspect field names (used to figure out where Max Booking Notice lives).
+    if (req.query.service_id) {
+      const svcRes = await zohoGet('/bookings/v1/json/fetchservice', {
+        service_id: String(req.query.service_id).trim()
+      });
+      return res.status(200).json({ ok: svcRes.ok, service_id: req.query.service_id, raw: svcRes.data });
+    }
+
     // 1. Workspaces
     const wsRes = await zohoGet('/bookings/v1/json/workspaces');
     if (!wsRes.ok) {
