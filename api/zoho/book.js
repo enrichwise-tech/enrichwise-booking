@@ -69,7 +69,7 @@ export default async function handler(req, res) {
   const requestedServiceId = body.service_id ? String(body.service_id).trim() : '';
   const countryCode = String(body.country_code || '91').replace(/\D/g, '') || '91';
 
-  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, country_code: countryCode, topics, mode, platform, queryPresent: !!query });
+  console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, country_code: countryCode, topics, mode, platform, queryPresent: !!query, requestedServiceId, bodyKeys: Object.keys(body) });
 
   if (!track || !['instant', 'callback'].includes(track)) {
     return res.status(400).json({ error: 'Invalid track' });
@@ -89,16 +89,27 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Could not parse slot "${slot}"` });
   }
 
-  // Prefer the service_id the frontend tagged onto this slot (from slots.js
-  // merge output — could be Priority Diagnostic or Wealth Consultation). Fall
-  // back to the track default if missing / not in allowlist.
+  // Build the list of services to try, in order:
+  //  1. The service_id the frontend tagged onto this slot (if valid)
+  //  2. The track's default (Wealth for instant, Callback for callback)
+  //  3. Every other known instant-track service (so a stale browser cache
+  //     that sends no service_id still lands on the RIGHT one — the Priority
+  //     Diagnostic slots would otherwise get routed to Wealth and rejected
+  //     as "Slot Not Available")
   const allowed = getAllowedServiceIds();
-  const fallbackServiceId = track === 'instant'
-    ? (process.env.ZOHO_INSTANT_SERVICE_ID || DEFAULT_INSTANT_SVC)
+  const trackDefault = track === 'instant'
+    ? (process.env.ZOHO_INSTANT_SERVICE_ID  || DEFAULT_INSTANT_SVC)
     : (process.env.ZOHO_CALLBACK_SERVICE_ID || DEFAULT_CALLBACK_SVC);
-  const serviceId = (requestedServiceId && allowed.includes(requestedServiceId))
-    ? requestedServiceId
-    : fallbackServiceId;
+  const candidateServices = [];
+  const push = sid => { if (sid && !candidateServices.includes(sid)) candidateServices.push(sid); };
+  if (requestedServiceId && allowed.includes(requestedServiceId)) push(requestedServiceId);
+  push(trackDefault);
+  if (track === 'instant') {
+    // include the other instant-track service as a fallback
+    push((process.env.ZOHO_PRIORITY_SERVICE_ID || DEFAULT_PRIORITY_SVC).trim());
+    push((process.env.ZOHO_INSTANT_SERVICE_ID  || DEFAULT_INSTANT_SVC ).trim());
+  }
+  const serviceId = candidateServices[0]; // primary attempt; we'll try others on Slot Not Available
 
   const topicsArr = Array.isArray(topics) ? topics : (topics ? [topics] : []);
 
@@ -125,8 +136,7 @@ export default async function handler(req, res) {
     additionalFields['Please describe your query in brief'] = truncate(query, 500);
   }
 
-  const formBody = {
-    service_id: serviceId,
+  const formBodyBase = {
     from_time: `${date} ${time24}`,
     customer_details: JSON.stringify(customerDetails),
     additional_fields: JSON.stringify(additionalFields),
@@ -134,53 +144,81 @@ export default async function handler(req, res) {
     notes: `Corpus: ${corpus || 'not specified'}`
   };
 
-  console.log('[zoho/book] posting (no staff_id, Zoho auto-assigns):', formBody);
+  // Try each candidate service in order. Zoho rejects with "Slot Not
+  // Available" if the specific service doesn't offer this exact slot time —
+  // so if the primary fails that way, we retry against the other known
+  // instant-track service before giving up. This makes the flow resilient
+  // to stale frontend caches that didn't tag the slot with service_id.
+  let r = null;
+  let usedServiceId = null;
+  let lastInnerMessage = '';
+  let lastData = null;
+  for (const sid of candidateServices) {
+    usedServiceId = sid;
+    const formBody = { ...formBodyBase, service_id: sid };
+    console.log('[zoho/book] attempting service', sid, formBody);
+    try {
+      r = await zohoPost('/bookings/v1/json/appointment', formBody);
+    } catch (err) {
+      console.error('[zoho/book] exception on', sid, ':', err.message);
+      sendAlert('Booking crashed', {
+        client: name,
+        mobile: `+${countryCode}${mobile}`,
+        track,
+        date,
+        slot,
+        error: err.message
+      }).catch(() => {});
+      return res.status(500).json({ error: err.message });
+    }
 
-  let r;
-  try {
-    r = await zohoPost('/bookings/v1/json/appointment', formBody);
-  } catch (err) {
-    console.error('[zoho/book] exception:', err.message);
-    sendAlert('Booking crashed', {
-      client: name,
-      mobile: `+${countryCode}${mobile}`,
-      track,
-      date,
-      slot,
-      error: err.message
-    }).catch(() => {});
-    return res.status(500).json({ error: err.message });
+    console.log('[zoho/book] response for', sid, 'status=', r.status, 'data=', JSON.stringify(r.data).slice(0, 600));
+
+    const rv = r.data?.response?.returnvalue || {};
+    const innerStatus = rv.status || r.data?.response?.status;
+    const innerMessage = rv.message || '';
+    lastInnerMessage = innerMessage;
+    lastData = r.data;
+    const looksLikeFailure = innerStatus === 'failure' || /mandatory|invalid|error|not available|busy|unavailable/i.test(innerMessage);
+
+    if (r.ok && !looksLikeFailure) {
+      // Success — populate response with what actually landed
+      return res.status(200).json({
+        ok: true,
+        booking_id: rv.booking_id || rv.id || null,
+        staff_id: rv.staff_id || null,
+        staff_name: rv.staff_name || null,
+        summary_url: rv.summary_url || null,
+        service_id: sid,
+        raw: rv
+      });
+    }
+    // On "Slot Not Available" / "not available" style errors, try the next
+    // service. On other errors (mandatory field, invalid, etc.), fail fast.
+    const shouldRetry = /not available|busy|unavailable/i.test(innerMessage);
+    if (!shouldRetry) break;
+    console.log('[zoho/book] slot not available on', sid, '— trying next candidate');
   }
 
-  console.log('[zoho/book] response status=', r.status, 'data=', JSON.stringify(r.data).slice(0, 600));
+  // Exhausted all candidates OR hit a non-retryable error
+  sendAlert('Booking failed', {
+    client: name,
+    mobile: `+${countryCode}${mobile}`,
+    track,
+    date,
+    slot,
+    zoho_message: lastInnerMessage || '(no message)'
+  }).catch(() => {});
 
-  const rv = r.data?.response?.returnvalue || {};
-  const innerStatus = rv.status || r.data?.response?.status;
-  const innerMessage = rv.message || '';
-  const looksLikeFailure = innerStatus === 'failure' || /mandatory|invalid|error|not available|busy|unavailable/i.test(innerMessage);
-
-  if (!r.ok || looksLikeFailure) {
-    sendAlert('Booking failed', {
-      client: name,
-      mobile: `+${countryCode}${mobile}`,
-      track,
-      date,
-      slot,
-      zoho_message: innerMessage || '(no message)'
-    }).catch(() => {});
-
-    return res.status(r.status || 502).json({
-      error: innerMessage || 'Booking failed',
-      details: r.data
-    });
-  }
-
-  return res.status(200).json({
-    ok: true,
-    booking_id: rv.booking_id || rv.id || null,
-    staff_id: rv.staff_id || null,
-    staff_name: rv.staff_name || null,
-    summary_url: rv.summary_url || null,
-    raw: rv
+  return res.status(r?.status || 502).json({
+    error: lastInnerMessage || 'Booking failed',
+    // Debug context — helps diagnose routing bugs from the browser.
+    debug: {
+      service_id_requested: requestedServiceId || null,
+      services_tried: candidateServices,
+      last_service_tried: usedServiceId,
+      allowed: allowed
+    },
+    details: lastData
   });
 }
