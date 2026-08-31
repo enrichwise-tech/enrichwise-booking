@@ -232,20 +232,50 @@ export default async function handler(req, res) {
         items.push({ iso: isoStr, dateStr: isoToZoho(isoStr) });
       }
 
-      // For each date, query ALL services in parallel and union has_slots.
-      // A date is bookable if ANY service has slots for it.
-      const results = await Promise.all(items.map(async ({ iso, dateStr }) => {
-        const perService = await Promise.all(serviceIds.map(async sid => {
+      // Build ONE flat list of (date, service) probes, then process in small
+      // parallel batches. With 2 services × 30 dates = 60 total probes, we
+      // saw ~10-20% Zoho rate-limit failures at full parallelism; batching
+      // to 8 at a time keeps well under Zoho's per-second cap.
+      const BATCH_SIZE = 8;
+      const probes = [];
+      for (const item of items) {
+        for (const sid of serviceIds) probes.push({ iso: item.iso, dateStr: item.dateStr, sid });
+      }
+      const probeResults = [];
+      for (let i = 0; i < probes.length; i += BATCH_SIZE) {
+        const batch = probes.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(batch.map(async ({ iso, dateStr, sid }) => {
           try {
             const r = await fetchTimes(sid, dateStr);
-            return r.ok && r.times.length > 0;
+            return { iso, sid, ok: r.ok, hasSlots: r.ok && r.times.length > 0 };
           } catch (err) {
             console.warn('[zoho/slots] summary fetch failed for', sid, dateStr, err.message);
-            return false;
+            return { iso, sid, ok: false, hasSlots: false };
           }
         }));
-        return { iso, has_slots: perService.some(Boolean) };
-      }));
+        probeResults.push(...batchResults);
+      }
+
+      // Group by date and decide has_slots per date:
+      //  - Any service confirmed has_slots=true → true
+      //  - All services confirmed successful empty → false
+      //  - At least one probe failed and none confirmed slots → true (unknown,
+      //    err on the side of bookable so genuine slots aren't hidden by
+      //    transient Zoho errors; user clicking will get the authoritative
+      //    per-date response)
+      const byDate = new Map();
+      for (const p of probeResults) {
+        if (!byDate.has(p.iso)) byDate.set(p.iso, []);
+        byDate.get(p.iso).push(p);
+      }
+      const results = items.map(({ iso }) => {
+        const probes = byDate.get(iso) || [];
+        const anyHasSlots = probes.some(p => p.ok && p.hasSlots);
+        if (anyHasSlots) return { iso, has_slots: true };
+        const allConfirmedEmpty = probes.length > 0 && probes.every(p => p.ok && !p.hasSlots);
+        if (allConfirmedEmpty) return { iso, has_slots: false };
+        return { iso, has_slots: true }; // unknown → treat as bookable
+      });
 
       return res.status(200).json({
         ok: true,
