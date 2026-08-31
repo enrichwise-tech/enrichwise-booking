@@ -53,7 +53,7 @@ export default async function handler(req, res) {
   const time24 = to24Hour(time);
   if (!time24) return res.status(400).json({ error: `Could not parse time "${time}"` });
 
-  const serviceId = process.env.ZOHO_INSTANT_SERVICE_ID || DEFAULT_INSTANT_SVC;
+  const serviceId = (req.query.service_id || process.env.ZOHO_INSTANT_SERVICE_ID || DEFAULT_INSTANT_SVC).trim();
 
   const customerDetails = {
     name: 'Auto-assign Probe',
