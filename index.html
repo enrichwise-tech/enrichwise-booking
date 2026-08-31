@@ -1772,6 +1772,11 @@ function goBooking() {
     setTimeout(function() { focusFirstEmpty(['gbpName', 'gbpEmail']); }, 100);
     return;
   }
+  // Fire the calendar summary fetch in the background NOW, while the user
+  // fills out the details screen (usually 30-60s). By the time they land on
+  // the calendar, the response is cached and the greyout + auto-jump render
+  // instantly instead of after a 4-5s "Loading availability..." wait.
+  warmupAvailability(state.track);
   go('s3');
   if (state.name)  document.getElementById('fName').value  = state.name;
   if (state.email) document.getElementById('fEmail').value = state.email;
@@ -1929,12 +1934,31 @@ function convertIstSlotToLocal(istTimeStr, isoDate) {
   return { local: local, dayTag: dayTag };
 }
 
+// Kick off the summary fetch early (usually from goBooking / details screen)
+// so the response is already in flight — often already resolved — by the
+// time the client lands on the calendar. Cached on state so
+// prefetchAvailability() can reuse it instead of re-fetching from scratch.
+function warmupAvailability(track) {
+  if (!track || track === 'gbp') return;
+  var url = API_BASE + '/api/zoho/slots?track=' + encodeURIComponent(track) + '&summary=1';
+  var promise = fetch(url).then(function(r) { return r.json(); }).catch(function() { return null; });
+  state.availabilityWarmup = { promise: promise, track: track, ts: Date.now() };
+}
+
 async function prefetchAvailability() {
   try {
-    var url = API_BASE + '/api/zoho/slots?track=' + encodeURIComponent(state.track) + '&summary=1';
-    var res = await fetch(url);
-    var data = await res.json();
-    if (!res.ok || !data.ok || !Array.isArray(data.dates)) return;
+    var w = state.availabilityWarmup;
+    var freshEnough = w && w.track === state.track && (Date.now() - w.ts) < 90000;
+    var data;
+    if (freshEnough) {
+      data = await w.promise;
+    } else {
+      var url = API_BASE + '/api/zoho/slots?track=' + encodeURIComponent(state.track) + '&summary=1';
+      var res = await fetch(url);
+      data = await res.json();
+      if (!res.ok || !data || !data.ok || !Array.isArray(data.dates)) return;
+    }
+    if (!data || !data.ok || !Array.isArray(data.dates)) return;
     var map = {};
     data.dates.forEach(function(d) { map[d.iso] = !!d.has_slots; });
     state.availabilityMap = map;
