@@ -41,10 +41,22 @@
 import { zohoGet } from './_client.js';
 import { getRedis } from '../_redis.js';
 
-const DEFAULT_INSTANT_SVC  = '279048000000733018'; // Private consultation (Online)
-const DEFAULT_CALLBACK_SVC = '279048000000841186'; // unused (under-1Cr routes to Zoho Form)
+const DEFAULT_INSTANT_SVC   = '279048000000733018'; // Private consultation (Online) — 6 staff, ~18-day window
+const DEFAULT_PRIORITY_SVC  = '279048000001524162'; // Priority Diagnostic Call — Jyoti + Yash, 3-day rolling window
+const DEFAULT_CALLBACK_SVC  = '279048000000841186'; // unused (under-1Cr routes to Zoho Form)
 const FALLBACK_SUMMARY_DAYS = 30; // used only if Zoho fetchservice fails; safely covers common Max Booking Notice values
 const MAX_SUMMARY_DAYS = 90;      // hard ceiling to protect against runaway Zoho configs / API calls
+
+// Instant track combines both services behind the scenes — clients see one
+// unified calendar. Order matters: services earlier in the array are preferred
+// when the same time slot is offered by multiple services. Priority Diagnostic
+// (2 consultants, 3-day rolling) comes first so its capacity gets used before
+// falling back to the wider 6-consultant Private Consultation pool.
+function getInstantServiceIds() {
+  const priority = (process.env.ZOHO_PRIORITY_SERVICE_ID || DEFAULT_PRIORITY_SVC).trim();
+  const wealth   = (process.env.ZOHO_INSTANT_SERVICE_ID  || DEFAULT_INSTANT_SVC ).trim();
+  return [priority, wealth].filter(Boolean);
+}
 
 // Fetch the service's configured Maximum Booking Notice from Zoho and cache
 // it in Upstash for 1 hour. Auto-detects when the user changes the value
@@ -187,11 +199,15 @@ export default async function handler(req, res) {
   const isSummary = req.query.summary === '1';
   const iso = req.query.date;
 
-  let serviceId;
+  // For the `instant` track we now query MULTIPLE Zoho services and merge
+  // their availability so clients see one seamless calendar. serviceIds is
+  // ordered by preference: earlier services win when the same slot time is
+  // offered by multiple services (their capacity gets used first).
+  let serviceIds;
   if (track === 'instant') {
-    serviceId = process.env.ZOHO_INSTANT_SERVICE_ID || DEFAULT_INSTANT_SVC;
+    serviceIds = getInstantServiceIds();
   } else if (track === 'callback') {
-    serviceId = process.env.ZOHO_CALLBACK_SERVICE_ID || DEFAULT_CALLBACK_SVC;
+    serviceIds = [(process.env.ZOHO_CALLBACK_SERVICE_ID || DEFAULT_CALLBACK_SVC).trim()];
   } else {
     return res.status(400).json({ error: 'Missing or invalid track (expected instant|callback)' });
   }
@@ -201,14 +217,11 @@ export default async function handler(req, res) {
   // ── Summary mode ──────────────────────────────────────────────────────────
   if (isSummary) {
     try {
-      // Ask Zoho what its Maximum Booking Notice is (cached 1hr in Redis).
-      // Auto-detects config changes in Zoho admin — no code deploy needed
-      // when the horizon is bumped from 15 to 18 to 30 days etc.
-      const maxDays = await getMaxNoticeDays(serviceId);
+      // Query max-notice per service in parallel; horizon = the LARGER value
+      // so the calendar covers every bookable date across all services.
+      const maxNoticePerService = await Promise.all(serviceIds.map(sid => getMaxNoticeDays(sid)));
+      const maxDays = Math.max(...maxNoticePerService);
 
-      // Generate ISO dates for today + next (maxDays - 1) days. Today is
-      // included because Zoho's minBookingNotice is short (1 hr) — same-day
-      // slots can still be available later in the day.
       const today = new Date();
       today.setUTCHours(0, 0, 0, 0);
       const items = [];
@@ -219,21 +232,25 @@ export default async function handler(req, res) {
         items.push({ iso: isoStr, dateStr: isoToZoho(isoStr) });
       }
 
+      // For each date, query ALL services in parallel and union has_slots.
+      // A date is bookable if ANY service has slots for it.
       const results = await Promise.all(items.map(async ({ iso, dateStr }) => {
-        try {
-          const r = await fetchTimes(serviceId, dateStr);
-          return { iso, has_slots: r.ok && r.times.length > 0 };
-        } catch (err) {
-          // Don't fail the whole summary on one bad date — just mark it unknown.
-          console.warn('[zoho/slots] summary fetch failed for', dateStr, err.message);
-          return { iso, has_slots: false };
-        }
+        const perService = await Promise.all(serviceIds.map(async sid => {
+          try {
+            const r = await fetchTimes(sid, dateStr);
+            return r.ok && r.times.length > 0;
+          } catch (err) {
+            console.warn('[zoho/slots] summary fetch failed for', sid, dateStr, err.message);
+            return false;
+          }
+        }));
+        return { iso, has_slots: perService.some(Boolean) };
       }));
 
       return res.status(200).json({
         ok: true,
-        service_id: serviceId,
-        max_days: maxDays,      // frontend uses this for the calendar horizon
+        service_ids: serviceIds,
+        max_days: maxDays,
         dates: results
       });
     } catch (err) {
@@ -242,7 +259,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── Per-date mode (existing behaviour) ────────────────────────────────────
+  // ── Per-date mode ─────────────────────────────────────────────────────────
   if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
     return res.status(400).json({ error: 'Missing or invalid date (expected YYYY-MM-DD)' });
   }
@@ -252,25 +269,45 @@ export default async function handler(req, res) {
   }
 
   try {
-    const r = await fetchTimes(serviceId, dateStr);
-    if (!r.ok) {
+    // Query all services in parallel, then merge: dedup by time, prefer the
+    // earlier-listed service (so priority-diagnostic capacity gets consumed
+    // before we fall back to the wider wealth-consultation pool).
+    const perService = await Promise.all(serviceIds.map(async sid => {
+      try {
+        const r = await fetchTimes(sid, dateStr);
+        return { sid, ok: r.ok, times: r.times, raw: r.raw };
+      } catch (err) {
+        console.warn('[zoho/slots] per-date fetch failed for', sid, dateStr, err.message);
+        return { sid, ok: false, times: [], raw: null };
+      }
+    }));
+
+    if (perService.every(s => !s.ok)) {
       return res.status(502).json({
         error: 'Zoho availableslots failed',
-        ...(isDebug ? { raw: r.raw } : {})
+        ...(isDebug ? { raw: perService.map(s => s.raw) } : {})
       });
     }
 
-    const sortedSlots = r.times
-      .sort((a, b) => timeToMinutes(a) - timeToMinutes(b))
-      .map(time => ({ time, staff_ids: [] }));
+    // Dedup by time, first service to offer a time wins (ownership tag).
+    const timeToService = new Map();
+    for (const { sid, times } of perService) {
+      for (const t of times) {
+        if (!timeToService.has(t)) timeToService.set(t, sid);
+      }
+    }
+
+    const sortedSlots = Array.from(timeToService.entries())
+      .sort((a, b) => timeToMinutes(a[0]) - timeToMinutes(b[0]))
+      .map(([time, sid]) => ({ time, service_id: sid, staff_ids: [] }));
 
     return res.status(200).json({
       ok: true,
-      service_id: serviceId,
+      service_ids: serviceIds,
       date: dateStr,
       iso,
       slots: sortedSlots,
-      ...(isDebug ? { raw: r.raw } : {})
+      ...(isDebug ? { raw: perService.map(s => s.raw) } : {})
     });
   } catch (err) {
     console.error('[zoho/slots] error:', err.message);

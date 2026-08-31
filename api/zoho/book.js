@@ -24,7 +24,18 @@
 import { zohoPost } from './_client.js';
 import { sendAlert } from '../_alert.js';
 
-const DEFAULT_INSTANT_SVC  = '279048000000733018'; // Private consultation (Online)
+const DEFAULT_INSTANT_SVC   = '279048000000733018'; // Private consultation (Online) — 6 staff
+const DEFAULT_PRIORITY_SVC  = '279048000001524162'; // Priority Diagnostic Call — 2 staff, 3-day rolling
+// The Zoho service IDs the app is allowed to route bookings to. Frontend picks
+// which one per slot (tagged in slots.js) and passes service_id in the POST.
+// Anything not in this allowlist falls back to the default instant service.
+function getAllowedServiceIds() {
+  return [
+    (process.env.ZOHO_INSTANT_SERVICE_ID  || DEFAULT_INSTANT_SVC ).trim(),
+    (process.env.ZOHO_PRIORITY_SERVICE_ID || DEFAULT_PRIORITY_SVC).trim(),
+    (process.env.ZOHO_CALLBACK_SERVICE_ID || DEFAULT_CALLBACK_SVC).trim()
+  ].filter(Boolean);
+}
 const DEFAULT_CALLBACK_SVC = '279048000000841186'; // unused
 const TIME_ZONE            = 'Asia/Calcutta';
 
@@ -55,6 +66,7 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const { track, date, slot, name, email, mobile, corpus, topics, mode, platform, query } = body;
+  const requestedServiceId = body.service_id ? String(body.service_id).trim() : '';
   const countryCode = String(body.country_code || '91').replace(/\D/g, '') || '91';
 
   console.log('[zoho/book] request:', { track, date, slot, name, email, mobile, country_code: countryCode, topics, mode, platform, queryPresent: !!query });
@@ -77,9 +89,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Could not parse slot "${slot}"` });
   }
 
-  const serviceId = track === 'instant'
+  // Prefer the service_id the frontend tagged onto this slot (from slots.js
+  // merge output — could be Priority Diagnostic or Wealth Consultation). Fall
+  // back to the track default if missing / not in allowlist.
+  const allowed = getAllowedServiceIds();
+  const fallbackServiceId = track === 'instant'
     ? (process.env.ZOHO_INSTANT_SERVICE_ID || DEFAULT_INSTANT_SVC)
     : (process.env.ZOHO_CALLBACK_SERVICE_ID || DEFAULT_CALLBACK_SVC);
+  const serviceId = (requestedServiceId && allowed.includes(requestedServiceId))
+    ? requestedServiceId
+    : fallbackServiceId;
 
   const topicsArr = Array.isArray(topics) ? topics : (topics ? [topics] : []);
 

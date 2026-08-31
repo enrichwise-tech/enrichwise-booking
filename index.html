@@ -2093,6 +2093,7 @@ function renderDaySlots(zohoDate, slots) {
       + ' data-iso="' + escapeHtml(state.slotDateIso) + '"'
       + ' data-time="' + escapeHtml(s.time) + '"'
       + ' data-staff="' + escapeHtml(s.staff_ids.join(',')) + '"'
+      + ' data-service="' + escapeHtml(s.service_id || '') + '"'
       + ' onclick="pickSlot(this)">' + label + '</button>';
   });
   html += '</div>';
@@ -2102,11 +2103,12 @@ function renderDaySlots(zohoDate, slots) {
 function pickSlot(el) {
   document.querySelectorAll('#calSlots .slot').forEach(function(s) { s.classList.remove('sel'); });
   el.classList.add('sel');
-  state.slotDate     = el.getAttribute('data-date');
-  state.slotDateIso  = el.getAttribute('data-iso');
-  state.slotTime     = el.getAttribute('data-time');
-  var staffAttr      = el.getAttribute('data-staff') || '';
-  state.slotStaffIds = staffAttr ? staffAttr.split(',').filter(Boolean) : [];
+  state.slotDate      = el.getAttribute('data-date');
+  state.slotDateIso   = el.getAttribute('data-iso');
+  state.slotTime      = el.getAttribute('data-time');
+  state.slotServiceId = el.getAttribute('data-service') || '';
+  var staffAttr       = el.getAttribute('data-staff') || '';
+  state.slotStaffIds  = staffAttr ? staffAttr.split(',').filter(Boolean) : [];
   trackEvent('slot_picked', { date: state.slotDate, slot: state.slotTime });
   document.getElementById('slotBtn').disabled = false;
 }
@@ -2130,7 +2132,8 @@ async function bookAppointment() {
         mode:         state.mode,
         platform:     state.platform,
         query:        state.query,
-        staff_ids:    state.slotStaffIds
+        staff_ids:    state.slotStaffIds,
+        service_id:   state.slotServiceId
       })
     });
     var data = await res.json();
