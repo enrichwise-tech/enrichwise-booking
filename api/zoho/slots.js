@@ -138,12 +138,43 @@ function timeToMinutes(t) {
 }
 
 // Fetch raw available time strings for a given service + date.
+// Caches successful responses in Upstash for SLOT_CACHE_TTL seconds so
+// multiple clients hitting the same date within that window share one Zoho
+// call instead of each triggering a fresh request (Zoho rate-limits us with
+// "Request limit reached" HTML error pages under load otherwise).
+// Also detects those HTML rate-limit responses and returns them as ok=false
+// so the summary layer can distinguish "confirmed empty" from "rate limited".
+const SLOT_CACHE_TTL = 60; // seconds
+
 async function fetchTimes(serviceId, dateStr) {
+  const cacheKey = `zoho:slots:${serviceId}:${dateStr}`;
+
+  // 1. Try Redis cache first
+  try {
+    const redis = getRedis();
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      const times = Array.isArray(cached) ? cached : JSON.parse(cached);
+      if (Array.isArray(times)) {
+        return { ok: true, times: applyOneHourCutoff(times, dateStr), raw: { cached: true } };
+      }
+    }
+  } catch {}
+
+  // 2. Cache miss — hit Zoho
   const r = await zohoGet('/bookings/v1/json/availableslots', {
     service_id: serviceId,
     selected_date: dateStr
   });
+
+  // 3. Detect Zoho's HTML rate-limit page (comes back as { raw: "<html>...Request limit reached..." })
+  const rawStr = typeof r.data?.raw === 'string' ? r.data.raw : '';
+  if (rawStr.includes('Request limit reached') || rawStr.includes('<html')) {
+    return { ok: false, times: [], raw: r.data, rateLimited: true };
+  }
   if (!r.ok) return { ok: false, times: [], raw: r.data };
+
+  // 4. Parse
   const rv = r.data?.response?.returnvalue;
   let raw = [];
   if (Array.isArray(rv?.data)) raw = rv.data;
@@ -153,6 +184,14 @@ async function fetchTimes(serviceId, dateStr) {
   const times = raw
     .map(s => (typeof s === 'string' ? s.trim() : (s?.time || s?.from_time || '')))
     .filter(s => timePattern.test(s));
+
+  // 5. Cache the parsed times (pre-cutoff — the cutoff depends on current time
+  //    and must be re-applied fresh on each read, not stored)
+  try {
+    const redis = getRedis();
+    await redis.set(cacheKey, JSON.stringify(times), { ex: SLOT_CACHE_TTL });
+  } catch {}
+
   return { ok: true, times: applyOneHourCutoff(times, dateStr), raw: r.data };
 }
 
@@ -236,7 +275,10 @@ export default async function handler(req, res) {
       // parallel batches. With 2 services × 30 dates = 60 total probes, we
       // saw ~10-20% Zoho rate-limit failures at full parallelism; batching
       // to 8 at a time keeps well under Zoho's per-second cap.
-      const BATCH_SIZE = 8;
+      // Kept conservative — Zoho returns HTML "Request limit reached" pages
+      // if we push too hard, and per-date responses are now cached in Redis
+      // (see fetchTimes) so most of these probes will be cache hits anyway.
+      const BATCH_SIZE = 4;
       const probes = [];
       for (const item of items) {
         for (const sid of serviceIds) probes.push({ iso: item.iso, dateStr: item.dateStr, sid });
