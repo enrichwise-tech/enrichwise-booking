@@ -97,18 +97,26 @@ async function fetchAllBookings(fromDate, toDate) {
   return out;
 }
 
-// Pull every CRM Event in [fromDate, toDate] via COQL, extracting the Booking
-// ID from Description. COQL caps at 200 rows per page and requires offset for
-// pagination. We fetch id/start/desc only to keep response size small.
+// Pull every CRM Event in [fromDate, toDate], extracting the Booking ID from
+// the Description. Uses the /Events/search endpoint (not COQL) because the
+// booking-app's ZOHO_REFRESH_TOKEN is granted for module scopes only, not for
+// coql.READ, and re-minting the refresh token would push out unrelated
+// consumers of the same self-client per Zoho's ~20-token FIFO cap.
+// per_page maxes at 200; page-loops until more_records is false.
 async function fetchAllEventBookingIds(fromDate, toDate) {
   const bidMap = new Map(); // "EN-12345" -> event id (first-seen wins)
-  for (let offset = 0; offset < 5000; offset += 200) {
-    const query = `select id, Start_DateTime, Description from Events where Start_DateTime >= '${toIsoStartIst(fromDate)}' and Start_DateTime <= '${toIsoEndIst(toDate)}' order by Start_DateTime limit 200 offset ${offset}`;
-    const r = await zohoPostJson(COQL_PATH, { select_query: query });
+  const criteria = `((Start_DateTime:greater_equal:${toIsoStartIst(fromDate)})and(Start_DateTime:less_equal:${toIsoEndIst(toDate)}))`;
+  for (let page = 1; page <= 100; page++) {
+    const r = await zohoGetJson(`${CRM_BASE}/Events/search`, {
+      criteria,
+      fields: 'id,Start_DateTime,Description',
+      per_page: 200,
+      page
+    });
+    // Empty result set returns 204 No Content
+    if (r.status === 204) break;
     if (!r.ok) {
-      // COQL returns 204 on empty
-      if (r.status === 204) break;
-      throw new Error(`Events COQL failed offset ${offset}: ${r.status} ${JSON.stringify(r.data).slice(0, 200)}`);
+      throw new Error(`Events search failed page ${page}: ${r.status} ${JSON.stringify(r.data).slice(0, 200)}`);
     }
     const rows = r.data?.data || [];
     for (const row of rows) {
@@ -144,20 +152,23 @@ async function resolveStaffCrmId(email) {
 async function findLeadIdByPhone(phoneRaw) {
   const digits = String(phoneRaw || '').replace(/\D/g, '');
   if (!digits) return null;
-  // Try the raw digits and also drop-leading-country-code variants
+  // Try the raw digits and also drop-leading-country-code variants — Zoho
+  // Leads' Mobile field is stored digits-only but not consistently formatted.
   const variants = new Set([digits]);
   if (digits.startsWith('91') && digits.length === 12) variants.add(digits.slice(2));
   if (digits.length === 10) variants.add(`91${digits}`);
-  const inList = [...variants].map(v => `'${v}'`).join(',');
-  const query = `select id, Mobile from Leads where Mobile in (${inList}) limit 5`;
-  try {
-    const r = await zohoPostJson(COQL_PATH, { select_query: query });
-    if (!r.ok) return null;
-    const rows = r.data?.data || [];
-    return rows[0]?.id || null;
-  } catch {
-    return null;
+  for (const v of variants) {
+    try {
+      const r = await zohoGetJson(`${CRM_BASE}/Leads/search`, { criteria: `(Mobile:equals:${v})` });
+      if (r.status === 204) continue;
+      if (!r.ok) continue;
+      const rows = r.data?.data || [];
+      if (rows[0]?.id) return rows[0].id;
+    } catch {
+      // keep trying variants
+    }
   }
+  return null;
 }
 
 // Build the Event payload for a Booking. Description mimics the native sync's
