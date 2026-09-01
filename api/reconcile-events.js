@@ -269,18 +269,34 @@ export default async function handler(req, res) {
       }))
     };
 
-    if (alertOnDrift && drift.length > 0) {
-      // Cap the alert body so we don't blow the Periskope 4KB limit if drift
-      // is huge. Show top 10 by appointment time, count the rest.
-      const shown = drift.slice(0, 10);
-      const rest = drift.length - shown.length;
-      const details = {
-        range: `${todayIso} to ${toIso}`,
-        missing_count: drift.length,
-        cases: shown.map(b => `${(b.booking_id||'').replace(/^#/,'')} ${b.start_time} ${b.customer_name} (${b.staff_name})`).join('\n'),
-        rest: rest > 0 ? `+${rest} more` : ''
-      };
-      sendAlert('Booking sync drift', details).catch(() => {});
+    // Two Periskope paths:
+    //  - drift > 0 → red alert with case list (both cron and manual invocations)
+    //  - drift == 0 AND this is the cron → green heartbeat so the team can see
+    //    every day that the reconciler ran and everything's clean. Silent
+    //    success is the pattern that let the Aug 27 outage sit undetected for
+    //    five days; the daily heartbeat is the fix.
+    //  - Manual invocations skip the heartbeat (avoids noise while debugging).
+    //  - Either path is suppressed by ?alert=0 for one-off silent sweeps.
+    if (alertOnDrift) {
+      if (drift.length > 0) {
+        // Cap the body so we don't blow the Periskope 4KB limit if drift is huge.
+        const shown = drift.slice(0, 10);
+        const rest = drift.length - shown.length;
+        const details = {
+          range: `${todayIso} to ${toIso}`,
+          missing_count: drift.length,
+          cases: shown.map(b => `${(b.booking_id||'').replace(/^#/,'')} ${b.start_time} ${b.customer_name} (${b.staff_name})`).join('\n'),
+          rest: rest > 0 ? `+${rest} more` : ''
+        };
+        sendAlert('Booking sync drift', details).catch(() => {});
+      } else if (isValidCron) {
+        sendAlert('Booking sync OK ✅', {
+          range: `${todayIso} to ${toIso} (${horizon} days)`,
+          upcoming: upcoming.length,
+          matched: eventBidMap.size,
+          drift: 0
+        }).catch(() => {});
+      }
     }
 
     if (!shouldBackfill || drift.length === 0) {
