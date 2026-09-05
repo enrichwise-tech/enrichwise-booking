@@ -144,22 +144,32 @@ function timeToMinutes(t) {
 // "Request limit reached" HTML error pages under load otherwise).
 // Also detects those HTML rate-limit responses and returns them as ok=false
 // so the summary layer can distinguish "confirmed empty" from "rate limited".
-const SLOT_CACHE_TTL = 60; // seconds
+// Cache TTL cut from 60s to 30s on 2026-09-07 to shorten the race window
+// where a slot the cache still thinks is free has just been booked by another
+// customer. Real failure mode observed on 2026-09-05 (Hrushikesh Deshpande):
+// slot booked by Sadam Kuthabdheen at 12:07:41, Hrushikesh's cache-warm
+// fetch showed it as free, click at 12:07:53 got "Slot Not Available".
+// Frontend also passes ?nocache=1 after a stale-slot booking failure to
+// bypass this cache and get an authoritative fresh read.
+const SLOT_CACHE_TTL = 30; // seconds
 
-async function fetchTimes(serviceId, dateStr) {
+async function fetchTimes(serviceId, dateStr, opts = {}) {
   const cacheKey = `zoho:slots:${serviceId}:${dateStr}`;
+  const { skipCache = false } = opts;
 
-  // 1. Try Redis cache first
-  try {
-    const redis = getRedis();
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      const times = Array.isArray(cached) ? cached : JSON.parse(cached);
-      if (Array.isArray(times)) {
-        return { ok: true, times: applyOneHourCutoff(times, dateStr), raw: { cached: true } };
+  // 1. Try Redis cache first (unless caller explicitly asked for fresh)
+  if (!skipCache) {
+    try {
+      const redis = getRedis();
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        const times = Array.isArray(cached) ? cached : JSON.parse(cached);
+        if (Array.isArray(times)) {
+          return { ok: true, times: applyOneHourCutoff(times, dateStr), raw: { cached: true } };
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   // 2. Cache miss — hit Zoho
   const r = await zohoGet('/bookings/v1/json/availableslots', {
@@ -339,6 +349,10 @@ export default async function handler(req, res) {
   if (!dateStr) {
     return res.status(400).json({ error: 'Invalid date' });
   }
+  // Frontend sets ?nocache=1 when re-selecting a date after a booking failed
+  // with a stale-slot error, so we bypass the 30s Redis cache and hit Zoho
+  // directly for an authoritative fresh read.
+  const skipCache = req.query.nocache === '1';
 
   try {
     // Query all services in parallel, then merge: dedup by time, prefer the
@@ -346,7 +360,7 @@ export default async function handler(req, res) {
     // before we fall back to the wider wealth-consultation pool).
     const perService = await Promise.all(serviceIds.map(async sid => {
       try {
-        const r = await fetchTimes(sid, dateStr);
+        const r = await fetchTimes(sid, dateStr, { skipCache });
         return { sid, ok: r.ok, times: r.times, raw: r.raw };
       } catch (err) {
         console.warn('[zoho/slots] per-date fetch failed for', sid, dateStr, err.message);

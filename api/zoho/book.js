@@ -23,6 +23,7 @@
  */
 import { zohoPost } from './_client.js';
 import { sendAlert } from '../_alert.js';
+import { getRedis } from '../_redis.js';
 
 const DEFAULT_INSTANT_SVC   = '279048000000733018'; // Private consultation (Online) — 6 staff
 const DEFAULT_PRIORITY_SVC  = '279048000001524162'; // Priority Diagnostic Call — 2 staff, 3-day rolling
@@ -182,6 +183,17 @@ export default async function handler(req, res) {
     const looksLikeFailure = innerStatus === 'failure' || /mandatory|invalid|error|not available|busy|unavailable/i.test(innerMessage);
 
     if (r.ok && !looksLikeFailure) {
+      // Success — bust the Redis slot cache for THIS date across ALL known
+      // services so the next customer viewing the calendar sees fresh
+      // availability, not a stale up-to-30s snapshot that still shows this
+      // slot as free. Fire-and-forget — cache bust failure never blocks
+      // returning success to the customer.
+      try {
+        const redis = getRedis();
+        const dels = allowed.map(id => redis.del(`zoho:slots:${id}:${date}`));
+        Promise.all(dels).catch(() => {});
+      } catch {}
+
       // Success — populate response with what actually landed
       return res.status(200).json({
         ok: true,

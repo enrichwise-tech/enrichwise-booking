@@ -2137,7 +2137,16 @@ function pickSlot(el) {
   document.getElementById('slotBtn').disabled = false;
 }
 
+// Match backend messages that mean "this slot just got taken / isn't
+// available anymore" (as opposed to hard bugs like missing fields or Zoho
+// down). On these we auto-refresh the calendar so the customer immediately
+// sees a fresh set of options instead of being told "try again" without
+// updating what's shown.
+var STALE_SLOT_RE = /slot not available|not available|unavailable|busy|invalid booking time|already booked/i;
+
 async function bookAppointment() {
+  if (state.bookInFlight) return; // hard guard against double-clicks
+  state.bookInFlight = true;
   setLoading('slotBtn', true);
   try {
     var res = await fetch(API_BASE + '/api/zoho/book', {
@@ -2163,7 +2172,9 @@ async function bookAppointment() {
     var data = await res.json();
     if (!res.ok || !data.ok) {
       var msg = (data && (data.error || (data.details && (data.details.message || JSON.stringify(data.details))))) || 'Booking failed. Please try again.';
-      throw new Error(msg);
+      var err = new Error(msg);
+      err.stale = STALE_SLOT_RE.test(msg);
+      throw err;
     }
     // Populate confirmation
     document.getElementById('cName').textContent    = state.name;
@@ -2174,10 +2185,59 @@ async function bookAppointment() {
     trackEvent('booking_created', { date: state.slotDate, slot: state.slotTime, booking_id: (data && data.booking_id) || null });
     go('s5');
   } catch (err) {
-    document.getElementById('slotsErrorText').textContent = err.message;
-    document.getElementById('slotsError').classList.add('show');
+    if (err.stale) {
+      // Slot got taken between the customer seeing it and clicking Confirm.
+      // Force-refresh the day's slots (nocache=1 skips the server's 30s
+      // Redis cache) so the customer sees a fresh list without needing to
+      // touch the date twice.
+      document.getElementById('slotsErrorText').textContent =
+        'This time was just booked by another client. Please pick a different one.';
+      document.getElementById('slotsError').classList.add('show');
+      var wasIso = state.slotDateIso;
+      state.slotDate = '';
+      state.slotTime = '';
+      state.slotServiceId = '';
+      state.slotStaffIds = [];
+      state.availabilityMap = null;
+      state.availabilityWarmup = null;
+      document.getElementById('slotBtn').disabled = true;
+      // Re-run the summary in the background so the calendar's greyout is
+      // fresh too, then re-fetch the day slots with nocache=1.
+      prefetchAvailability();
+      if (wasIso) selectDateNoCache(wasIso);
+    } else {
+      document.getElementById('slotsErrorText').textContent = err.message;
+      document.getElementById('slotsError').classList.add('show');
+    }
   }
   setLoading('slotBtn', false);
+  state.bookInFlight = false;
+}
+
+// Cache-busting variant of selectDate used only after a stale-slot booking
+// failure. Same code as selectDate but passes ?nocache=1 to force the server
+// to bypass its 30s slot cache and hit Zoho fresh. Kept separate so the normal
+// customer flow doesn't lose the caching win on every date click.
+async function selectDateNoCache(iso) {
+  state.slotDateIso = iso;
+  state.slotDate = '';
+  state.slotTime = '';
+  state.slotStaffIds = [];
+  document.getElementById('slotBtn').disabled = true;
+  renderCalendar();
+  var panel = document.getElementById('calSlots');
+  panel.innerHTML = '<div class="cal-slots-loading">Refreshing available times...</div>';
+  try {
+    var url = API_BASE + '/api/zoho/slots?track=' + encodeURIComponent(state.track) + '&date=' + encodeURIComponent(iso) + '&nocache=1';
+    var res = await fetch(url);
+    var data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load slots');
+    renderDaySlots(data.date, data.slots || []);
+  } catch (err) {
+    panel.innerHTML = '';
+    document.getElementById('slotsErrorText').textContent = err.message || 'Could not load slots. Please try again.';
+    document.getElementById('slotsError').classList.add('show');
+  }
 }
 
 // Populate the "Date & time" row on the confirmation screen. IST users get
