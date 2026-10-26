@@ -40,6 +40,7 @@
  */
 import { zohoGet } from './_client.js';
 import { getRedis } from '../_redis.js';
+import { isBlockedDate } from './_blocked-dates.js';
 
 const DEFAULT_INSTANT_SVC   = '279048000000733018'; // Private consultation (Online) — 6 staff, ~18-day window
 const DEFAULT_PRIORITY_SVC  = '279048000001524162'; // Priority Diagnostic Call — Jyoti + Yash, 3-day rolling window
@@ -156,6 +157,10 @@ const SLOT_CACHE_TTL = 30; // seconds
 async function fetchTimes(serviceId, dateStr, opts = {}) {
   const cacheKey = `zoho:slots:${serviceId}:${dateStr}`;
   const { skipCache = false } = opts;
+
+  // 0. Dates closed on the website report as confirmed-empty, so the calendar
+  //    greys them out and no Zoho call is made.
+  if (isBlockedDate(dateStr)) return { ok: true, times: [], raw: { blocked: true } };
 
   // 1. Try Redis cache first (unless caller explicitly asked for fresh)
   if (!skipCache) {

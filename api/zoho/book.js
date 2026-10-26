@@ -24,6 +24,7 @@
 import { zohoPost } from './_client.js';
 import { sendAlert } from '../_alert.js';
 import { getRedis } from '../_redis.js';
+import { isBlockedDate } from './_blocked-dates.js';
 
 const DEFAULT_INSTANT_SVC   = '279048000000733018'; // Private consultation (Online) — 6 staff
 const DEFAULT_PRIORITY_SVC  = '279048000001524162'; // Priority Diagnostic Call — 2 staff, 3-day rolling
@@ -83,6 +84,12 @@ export default async function handler(req, res) {
   }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return res.status(400).json({ error: 'Invalid email' });
+  }
+
+  // Closed on the website (see _blocked-dates.js). Catches pages loaded
+  // before the date was closed. No Zoho call and no failure alert.
+  if (isBlockedDate(date)) {
+    return res.status(409).json({ error: 'This date is no longer available. Please pick another date.' });
   }
 
   const time24 = to24Hour(slot);
