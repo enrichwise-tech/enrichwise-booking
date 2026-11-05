@@ -25,6 +25,7 @@ import { zohoPost } from './_client.js';
 import { sendAlert } from '../_alert.js';
 import { getRedis } from '../_redis.js';
 import { isBlockedDate } from './_blocked-dates.js';
+import { checkCap, clearCountCache } from './_caps.js';
 
 const DEFAULT_INSTANT_SVC   = '279048000000733018'; // Private consultation (Online) — 6 staff
 const DEFAULT_PRIORITY_SVC  = '279048000001524162'; // Priority Diagnostic Call — 2 staff, 3-day rolling
@@ -162,6 +163,12 @@ export default async function handler(req, res) {
   let lastInnerMessage = '';
   let lastData = null;
   for (const sid of candidateServices) {
+    // Daily cap, read fresh from Zoho so a page left open can't book past it.
+    const capCheck = await checkCap(sid, date, { fresh: true });
+    if (capCheck.atCap) {
+      console.log('[zoho/book] at daily cap, skipping', sid, date, capCheck.count, '/', capCheck.cap);
+      continue;
+    }
     usedServiceId = sid;
     const formBody = { ...formBodyBase, service_id: sid };
     console.log('[zoho/book] attempting service', sid, formBody);
@@ -198,7 +205,8 @@ export default async function handler(req, res) {
       try {
         const redis = getRedis();
         const dels = allowed.map(id => redis.del(`zoho:slots:${id}:${date}`));
-        Promise.all(dels).catch(() => {});
+        dels.push(clearCountCache(sid, date));
+        await Promise.allSettled(dels);
       } catch {}
 
       // Success — populate response with what actually landed
@@ -217,6 +225,12 @@ export default async function handler(req, res) {
     const shouldRetry = /not available|busy|unavailable/i.test(innerMessage);
     if (!shouldRetry) break;
     console.log('[zoho/book] slot not available on', sid, '— trying next candidate');
+  }
+
+  // Every consultation is at its cap for this date. Expected, so no failure
+  // alert. The wording makes the page refresh its slots (STALE_SLOT_RE).
+  if (r === null) {
+    return res.status(409).json({ error: 'These slots are not available any more. Please pick another date.' });
   }
 
   // Exhausted all candidates OR hit a non-retryable error

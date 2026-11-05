@@ -7,6 +7,7 @@
  * Gated behind the same query-key as /api/zoho/info to avoid leaking traffic.
  */
 import { getRecentEvents } from './_events.js';
+import { getZohoUsage } from './zoho/_usage.js';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,6 +24,15 @@ export default async function handler(req, res) {
   const provided = (req.query.key || '').trim();
   if (!expected || provided !== expected) {
     return res.status(404).json({ error: 'Not found' });
+  }
+
+  if (req.query.usage === '1') {
+    try {
+      const days = Math.min(parseInt(req.query.days || '14', 10) || 14, 40);
+      return res.status(200).json({ ok: true, zoho_usage: await getZohoUsage(days) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   }
 
   const limit = Math.min(parseInt(req.query.limit || '200', 10) || 200, 500);

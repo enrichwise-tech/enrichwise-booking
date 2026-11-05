@@ -13,6 +13,7 @@
  * Hardcoded for India DC (enrichwise.zohobookings.in → zohoapis.in).
  */
 import { getRedis } from '../_redis.js';
+import { recordZohoCall } from './_usage.js';
 
 const ZOHO_ACCOUNTS = 'https://accounts.zoho.in';
 const ZOHO_API = 'https://www.zohoapis.in';
@@ -149,6 +150,8 @@ async function zohoFetch(path, { method = 'GET', query, body, json = false, retr
 
   const res = await fetch(url, init);
   const text = await res.text();
+
+  await recordZohoCall(path, { limited: res.status === 429 || text.includes('Request limit reached') });
 
   // Access token expired mid-flight — invalidate cache and retry once
   if (res.status === 401 && retryOn401) {
