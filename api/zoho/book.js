@@ -15,7 +15,7 @@
  *   }
  *
  * No staff_id is sent. Zoho auto-assigns a free staff from the service's
- * pool — verified 2026-04-24 via /api/zoho/test-book-no-staff. This avoids
+ * pool, verified 2026-04-24 with a test booking. This avoids
  * the per-staff retry loop that previously masked the real error when all
  * staff in our local pool happened to mismatch Zoho's actual schedule.
  *
