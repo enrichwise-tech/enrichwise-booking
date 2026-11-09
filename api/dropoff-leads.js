@@ -28,8 +28,9 @@ const PUSHED_SET = 'crm:pushed';
 const PUSHED_TTL = 60 * 60 * 24 * 30;      // 30 days
 const DROPOFF_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 const REDIS_BATCH = 200;                    // hashes per pipeline round-trip
-const ZOHO_TIME_BUDGET_MS = 40 * 1000;      // stop starting new Zoho writes after this
+const ZOHO_TIME_BUDGET_MS = 42 * 1000;      // stop starting new Zoho writes after this
 const MAX_PER_RUN = 150;                    // hard cap on Zoho upserts per run
+const CONCURRENCY = 4;                      // parallel Zoho upserts (each ~2.5s from Vercel's region)
 
 const DROP_STAGES  = new Set(['otp_verified', 'corpus_selected', 'details_submitted', 'slot_picked']);
 const DONE_STAGES  = new Set(['booking_created', 'gbp_redirected']);
@@ -133,22 +134,33 @@ export default async function handler(req, res) {
 
     console.log(`[dropoff-leads] ${dropoffs.length} eligible drop-offs, ${alreadyPushed} already in CRM, ${pending.length} to push, ${pruned} stale index entries pruned`);
 
-    let created = 0, updated = 0, skipped = 0, failed = 0, deferred = 0;
+    let created = 0, updated = 0, skipped = 0, failed = 0, deferred = 0, startedCount = 0;
     let aborted = null;
     const results = [];
 
-    for (const d of pending) {
-      if (!d.country_code || !d.mobile) { skipped++; continue; }
+    // A few workers pull from the shared queue so one slow Zoho round-trip
+    // does not serialise the whole run (one lead at a time managed ~16 per
+    // 40s from Vercel; the site produces ~30 drop-offs a day).
+    const queue = pending.slice();
+    const worker = async () => {
+      while (queue.length) {
+        const d = queue.shift();
+        if (!d.country_code || !d.mobile) { skipped++; continue; }
 
-      // Once Zoho auth itself is failing (token refresh rate-limited, invalid
-      // refresh token...) every further lead would fail the same way and each
-      // attempt hits accounts.zoho.in again, so stop the run and leave the rest
-      // for the next one.
-      if (aborted || created + updated + failed >= MAX_PER_RUN || Date.now() - started > ZOHO_TIME_BUDGET_MS) {
-        deferred++;
-        continue;
+        // Once Zoho auth itself is failing (token refresh rate-limited, invalid
+        // refresh token...) every further lead would fail the same way and each
+        // attempt hits accounts.zoho.in again, so stop the run and leave the rest
+        // for the next one.
+        if (aborted || startedCount >= MAX_PER_RUN || Date.now() - started > ZOHO_TIME_BUDGET_MS) {
+          deferred++;
+          continue;
+        }
+        startedCount++;
+        await pushOne(d);
       }
+    };
 
+    const pushOne = async (d) => {
       try {
         const result = await upsertFunnelLead({
           stage: d.last_stage,
@@ -194,7 +206,9 @@ export default async function handler(req, res) {
           console.error('[dropoff-leads] Zoho auth failure - aborting this run, remaining drop-offs deferred');
         }
       }
-    }
+    };
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
     console.log(`[dropoff-leads] done in ${Date.now() - started}ms: ${created} created, ${updated} updated, ${skipped} skipped, ${failed} failed, ${deferred} deferred to next run${aborted ? ' (aborted on Zoho auth failure)' : ''}`);
 
