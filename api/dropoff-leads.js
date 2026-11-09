@@ -134,12 +134,17 @@ export default async function handler(req, res) {
     console.log(`[dropoff-leads] ${dropoffs.length} eligible drop-offs, ${alreadyPushed} already in CRM, ${pending.length} to push, ${pruned} stale index entries pruned`);
 
     let created = 0, updated = 0, skipped = 0, failed = 0, deferred = 0;
+    let aborted = null;
     const results = [];
 
     for (const d of pending) {
       if (!d.country_code || !d.mobile) { skipped++; continue; }
 
-      if (created + updated + failed >= MAX_PER_RUN || Date.now() - started > ZOHO_TIME_BUDGET_MS) {
+      // Once Zoho auth itself is failing (token refresh rate-limited, invalid
+      // refresh token...) every further lead would fail the same way and each
+      // attempt hits accounts.zoho.in again, so stop the run and leave the rest
+      // for the next one.
+      if (aborted || created + updated + failed >= MAX_PER_RUN || Date.now() - started > ZOHO_TIME_BUDGET_MS) {
         deferred++;
         continue;
       }
@@ -184,10 +189,14 @@ export default async function handler(req, res) {
           stage: d.last_stage,
           error: err.message
         });
+        if (/token refresh failed|Access Denied|INVALID_TOKEN|OAUTH_SCOPE_MISMATCH|HTTP 401/i.test(err.message)) {
+          aborted = err.message.slice(0, 300);
+          console.error('[dropoff-leads] Zoho auth failure - aborting this run, remaining drop-offs deferred');
+        }
       }
     }
 
-    console.log(`[dropoff-leads] done in ${Date.now() - started}ms: ${created} created, ${updated} updated, ${skipped} skipped, ${failed} failed, ${deferred} deferred to next run`);
+    console.log(`[dropoff-leads] done in ${Date.now() - started}ms: ${created} created, ${updated} updated, ${skipped} skipped, ${failed} failed, ${deferred} deferred to next run${aborted ? ' (aborted on Zoho auth failure)' : ''}`);
 
     return res.status(200).json({
       ok: true,
@@ -200,6 +209,7 @@ export default async function handler(req, res) {
       skipped,
       failed,
       deferred,
+      aborted,
       elapsed_ms: Date.now() - started,
       results
     });

@@ -153,17 +153,21 @@ async function zohoFetch(path, { method = 'GET', query, body, json = false, retr
 
   await recordZohoCall(path, { limited: res.status === 429 || text.includes('Request limit reached') });
 
-  // Access token expired mid-flight — invalidate cache and retry once
-  if (res.status === 401 && retryOn401) {
+  let data;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+  // Access token expired mid-flight — invalidate cache and retry once.
+  // Only for a genuinely dead token: a 401 for a missing scope
+  // (OAUTH_SCOPE_MISMATCH) would come back identical with a fresh token, and
+  // refreshing on every such call is what tripped Zoho's OAuth rate limit.
+  const tokenDead = res.status === 401 && data?.code !== 'OAUTH_SCOPE_MISMATCH';
+  if (tokenDead && retryOn401) {
     try {
       const redis = getRedis();
       await redis.del(TOKEN_KEY);
     } catch {}
     return zohoFetch(path, { method, query, body, json, retryOn401: false });
   }
-
-  let data;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
 
   return { status: res.status, ok: res.ok, data };
 }

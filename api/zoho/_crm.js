@@ -39,7 +39,13 @@ async function resolveUserIdByEmail(email) {
   try {
     // Zoho CRM v6 users endpoint — fetch active users and match by email client-side
     const r = await zohoGetJson(`${CRM_BASE}/users`, { type: 'ActiveUsers' });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      // Remember the failure too, so one run does not re-hit the endpoint for
+      // every lead (the token on Vercel lacks the users scope: 401 every time).
+      console.warn('[zoho/_crm] user lookup failed:', r.status, r.data?.code || '', '- Owner/RM left to Zoho default');
+      userIdCache.set(key, null);
+      return null;
+    }
     const users = r.data?.users || [];
     const hit = users.find(u => (u.email || '').toLowerCase() === key);
     const id = hit?.id || null;
@@ -47,6 +53,7 @@ async function resolveUserIdByEmail(email) {
     return id;
   } catch (err) {
     console.warn('[zoho/_crm] user lookup failed for', email, err.message);
+    userIdCache.set(key, null);
     return null;
   }
 }
@@ -139,16 +146,29 @@ export async function upsertFunnelLead(info = {}) {
     const defaultRMEmail    = (process.env.BOOKING_DEFAULT_RM_EMAIL || defaultOwnerEmail).trim();
     const rmFieldName       = (process.env.BOOKING_RM_FIELD || 'RM1').trim();
 
-    if (defaultOwnerEmail) {
+    // Preferred: Zoho user IDs straight from env (BOOKING_DEFAULT_OWNER_ID /
+    // BOOKING_DEFAULT_RM_ID). The email route needs the ZohoCRM.users scope,
+    // which the token on Vercel does not have, so without the IDs the lead
+    // falls to the token's own user.
+    const defaultOwnerId = (process.env.BOOKING_DEFAULT_OWNER_ID || '').trim();
+    const defaultRMId    = (process.env.BOOKING_DEFAULT_RM_ID || defaultOwnerId).trim();
+
+    if (defaultOwnerId) {
+      fields.Owner = defaultOwnerId;
+    } else if (defaultOwnerEmail) {
       const ownerId = await resolveUserIdByEmail(defaultOwnerEmail);
       if (ownerId) fields.Owner = ownerId;
       else console.warn('[zoho/_crm] could not resolve owner email to user ID:', defaultOwnerEmail);
     }
-    if (defaultRMEmail && rmFieldName) {
-      // RM1 is a User Lookup field — pass the resolved user ID
-      const rmUserId = await resolveUserIdByEmail(defaultRMEmail);
-      if (rmUserId) fields[rmFieldName] = rmUserId;
-      else console.warn('[zoho/_crm] could not resolve RM email to user ID:', defaultRMEmail);
+    if (rmFieldName) {
+      // RM1 is a User Lookup field — pass the user ID
+      if (defaultRMId) {
+        fields[rmFieldName] = defaultRMId;
+      } else if (defaultRMEmail) {
+        const rmUserId = await resolveUserIdByEmail(defaultRMEmail);
+        if (rmUserId) fields[rmFieldName] = rmUserId;
+        else console.warn('[zoho/_crm] could not resolve RM email to user ID:', defaultRMEmail);
+      }
     }
   }
 
