@@ -68,6 +68,14 @@ assert.match(searches[0], /Mobile:equals:9876543210\)/);
 assert.match(searches[0], /Mobile:equals:\+919876543210/);
 assert.ok(!JSON.stringify(r.body).includes('SECRET'), 'only name and email leave the server');
 
+// NRI: country code as picked, and no bare-number match outside India
+searches = []; store.set('otp:971501234567', '123456'); store.delete('verify_attempts:971501234567');
+r = await call({ mobile: '501234567', country_code: '971', otp: '123456', check_gbp: true });
+assert.equal(r.body.gbp_done, true);
+assert.match(searches[0], /Mobile:equals:971501234567\)/);
+assert.match(searches[0], /Mobile:equals:\+971501234567/);
+assert.ok(!/Mobile:equals:501234567\)/.test(searches[0]), 'no bare match for non-91: ' + searches[0]);
+
 zoho.mode = 'notgbp';
 r = await verify({ check_gbp: true });
 assert.deepEqual(r.body, { valid: true });

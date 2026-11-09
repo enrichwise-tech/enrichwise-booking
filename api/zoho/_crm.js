@@ -92,15 +92,20 @@ export async function findLeadByPhone(mobileDigits) {
 }
 
 /**
- * Has this mobile filled the GBP form? Checks every Lead with that mobile, in
- * the formats it may be stored in (91XXXXXXXXXX, XXXXXXXXXX, +91XXXXXXXXXX).
+ * Has this mobile filled the GBP form? Checks every Lead with that mobile, as
+ * country code + number, with or without "+", and for +91 also the bare number.
  * Returns { gbpDone, name, email } with name/email only for prefill, or null
  * if Zoho can't be read. One CRM search.
  */
 export async function findGbpLead(countryCode, mobile) {
+  const cc = String(countryCode).replace(/\D/g, '');
   const local = String(mobile).replace(/\D/g, '');
-  const full = `${String(countryCode).replace(/\D/g, '')}${local}`;
-  const criteria = `((Mobile:equals:${full})or(Mobile:equals:${local})or(Mobile:equals:+${full}))`;
+  const full = `${cc}${local}`;
+  // Bare 10 digits only for India: for any other country it could be someone
+  // else's Indian number, and we'd prefill a stranger's name and email.
+  const formats = [`(Mobile:equals:${full})`, `(Mobile:equals:+${full})`];
+  if (cc === '91') formats.push(`(Mobile:equals:${local})`);
+  const criteria = `(${formats.join('or')})`;
   const r = await zohoGetJson(`${CRM_BASE}/Leads/search`, { criteria });
   if (r.status === 204) return { gbpDone: false, name: '', email: '' };
   if (!r.ok) return null;
