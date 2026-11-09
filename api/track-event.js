@@ -55,11 +55,21 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid country_code' });
   }
 
+  // Name / email / platform are sent by the page with every event; keep them
+  // so the drop-off cron can create a named Lead instead of a bare "Lead".
+  const name = String(body.name || '').trim().slice(0, 100);
+  const email = String(body.email || '').trim().slice(0, 254);
+  const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+  const platform = Array.isArray(body.platform) ? body.platform.join(', ') : String(body.platform || '').trim().slice(0, 100);
+
   const evt = {
     type,
     mobile,
     country_code: cc,
     track: body.track || '',
+    name: name || undefined,
+    email: emailOk ? email : undefined,
+    platform: platform || undefined,
     corpus: body.corpus || undefined,
     topics: body.topics || undefined,
     mode: body.mode || undefined,
