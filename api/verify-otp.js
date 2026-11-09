@@ -3,8 +3,13 @@
  * Body: { mobile: "9876543210", otp: "123456" }
  *
  * Checks the OTP stored in Upstash Redis. Deletes it on success (one-time use).
+ * With check_gbp: true, also says whether this mobile already filled the GBP
+ * form (one Zoho CRM search), as gbp_done plus name/email for prefill.
  */
 import { getRedis } from './_redis.js';
+import { findGbpLead } from './zoho/_crm.js';
+
+const GBP_CHECK_TIMEOUT_MS = 2500;
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -73,6 +78,19 @@ export default async function handler(req, res) {
     await redis.del(`verify_attempts:${fullNumber}`);
   } catch (err) {
     console.error('[verify-otp] redis cleanup error:', err.message);
+  }
+
+  // Already filled the GBP form? Lets a plain link skip the corpus step. Only
+  // asked for after the OTP proves the number, so name/email go to its owner.
+  // Never holds up verification: any error or a slow Zoho means "not known".
+  if (body.check_gbp) {
+    const gbp = await Promise.race([
+      findGbpLead(countryCode, mobile).catch(() => null),
+      new Promise(resolve => setTimeout(() => resolve(null), GBP_CHECK_TIMEOUT_MS))
+    ]);
+    if (gbp?.gbpDone) {
+      return res.status(200).json({ valid: true, gbp_done: true, name: gbp.name, email: gbp.email });
+    }
   }
 
   return res.status(200).json({ valid: true });

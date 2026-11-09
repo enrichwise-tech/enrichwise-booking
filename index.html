@@ -1667,10 +1667,16 @@ async function verifyOtp() {
     var res = await fetch(API_BASE + '/api/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mobile: state.mob, country_code: state.cc, otp: code })
+      body: JSON.stringify({ mobile: state.mob, country_code: state.cc, otp: code, check_gbp: !state.fromGbp })
     });
     var data = await res.json();
     if (!res.ok || !data.valid) throw new Error('invalid');
+    // Zoho says this mobile already filled the GBP form: same path as a GBP return link
+    if (!state.fromGbp && data.gbp_done) {
+      state.fromGbp = true;
+      if (!state.name && data.name) state.name = data.name;
+      if (!state.email && data.email) state.email = data.email;
+    }
     clearInterval(timerInterval);
     trackEvent('otp_verified');
     // Remember this verification for 60 min so if the user re-enters after

@@ -92,6 +92,26 @@ export async function findLeadByPhone(mobileDigits) {
 }
 
 /**
+ * Has this mobile filled the GBP form? Checks every Lead with that mobile, in
+ * the formats it may be stored in (91XXXXXXXXXX, XXXXXXXXXX, +91XXXXXXXXXX).
+ * Returns { gbpDone, name, email } with name/email only for prefill, or null
+ * if Zoho can't be read. One CRM search.
+ */
+export async function findGbpLead(countryCode, mobile) {
+  const local = String(mobile).replace(/\D/g, '');
+  const full = `${String(countryCode).replace(/\D/g, '')}${local}`;
+  const criteria = `((Mobile:equals:${full})or(Mobile:equals:${local})or(Mobile:equals:+${full}))`;
+  const r = await zohoGetJson(`${CRM_BASE}/Leads/search`, { criteria });
+  if (r.status === 204) return { gbpDone: false, name: '', email: '' };
+  if (!r.ok) return null;
+  const lead = (r.data?.data || []).find(l => l.GBP_form_received === true);
+  if (!lead) return { gbpDone: false, name: '', email: '' };
+  const last = lead.Last_Name && lead.Last_Name !== 'Lead' ? lead.Last_Name : '';
+  const name = [lead.First_Name, last].filter(Boolean).join(' ').trim();
+  return { gbpDone: true, name, email: lead.Email || '' };
+}
+
+/**
  * Upsert a Lead. Called from every funnel step.
  * `info` keys (all optional except mobile + country_code):
  *   stage:      one of STAGE_LABEL keys
