@@ -26,6 +26,7 @@
  */
 import { zohoGet, zohoGetJson, zohoPostJson } from './zoho/_client.js';
 import { sendAlert } from './_alert.js';
+import { rebuildDuplicateIndex } from './zoho/_dupes.js';
 
 const CRM_BASE = '/crm/v6';
 const BOOKINGS_PATH = '/bookings/v1/json/fetchappointment';
@@ -241,6 +242,18 @@ export default async function handler(req, res) {
     // Cancelled bookings are legitimately absent from CRM (the native sync
     // deletes their Event on cancel), so exclude them from the drift set.
     const upcoming = bookings.filter(b => b.status !== 'cancel');
+
+    // Refresh the "already booked" index the booking page checks before it
+    // creates a booking. Rebuilt from Zoho so bookings made on Zoho's own
+    // page, or by the team inside Zoho, are known too, and so a cancelled
+    // booking stops warning within a day. Redis only, no extra Zoho calls.
+    let dupeIndexWritten = 0;
+    try {
+      dupeIndexWritten = await rebuildDuplicateIndex(upcoming);
+      console.log(`[reconcile] duplicate index: ${dupeIndexWritten} mobiles`);
+    } catch (err) {
+      console.warn('[reconcile] duplicate index rebuild failed:', err.message);
+    }
     const drift = [];
     for (const b of upcoming) {
       const bid = (b.booking_id || '').replace(/^#/, '');
@@ -256,6 +269,7 @@ export default async function handler(req, res) {
       bookings_total: bookings.length,
       bookings_upcoming: upcoming.length,
       events_with_booking_id: eventBidMap.size,
+      duplicate_index_mobiles: dupeIndexWritten,
       drift_count: drift.length,
       drift: drift.map(b => ({
         booking_id: (b.booking_id || '').replace(/^#/, ''),

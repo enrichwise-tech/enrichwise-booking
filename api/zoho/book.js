@@ -26,6 +26,7 @@ import { sendAlert } from '../_alert.js';
 import { getRedis } from '../_redis.js';
 import { isBlockedDate } from './_blocked-dates.js';
 import { checkCap, clearCountCache } from './_caps.js';
+import { findUpcomingBooking, rememberBooking } from './_dupes.js';
 
 const DEFAULT_INSTANT_SVC   = '279048000000733018'; // Private consultation (Online) — 6 staff
 const DEFAULT_PRIORITY_SVC  = '279048000001524162'; // Priority Diagnostic Call — 2 staff, 3-day rolling
@@ -91,6 +92,20 @@ export default async function handler(req, res) {
   // before the date was closed. No Zoho call and no failure alert.
   if (isBlockedDate(date)) {
     return res.status(409).json({ error: 'This date is no longer available. Please pick another date.' });
+  }
+
+  // Already has a consultation coming up? Zoho's own "Slots per Customer"
+  // limit does not apply to bookings made through the API, so the site has to
+  // do this itself. A warning the customer can click past, never a block.
+  if (!body.confirm_duplicate) {
+    const dup = await findUpcomingBooking(countryCode, mobile);
+    if (dup) {
+      console.log('[zoho/book] duplicate warning for', countryCode + mobile, dup.booking_id, dup.date, dup.slot);
+      return res.status(409).json({
+        error: `You already have a consultation booked on ${dup.date} at ${dup.slot}.`,
+        duplicate: { date: dup.date, slot: dup.slot, booking_id: dup.booking_id || null }
+      });
+    }
   }
 
   const time24 = to24Hour(slot);
@@ -208,6 +223,15 @@ export default async function handler(req, res) {
         dels.push(clearCountCache(sid, date));
         await Promise.allSettled(dels);
       } catch {}
+
+      // Remember it so a second attempt on the same mobile is caught.
+      await rememberBooking(countryCode, mobile, {
+        date,
+        slot,
+        time24,
+        booking_id: (rv.booking_id || '').replace(/^#/, ''),
+        service_id: sid
+      });
 
       // Success — populate response with what actually landed
       return res.status(200).json({

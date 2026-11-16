@@ -1886,6 +1886,7 @@ function loadSlots() {
   state.bookingHorizonDays = null;
   document.getElementById('slotBtn').disabled = true;
   document.getElementById('slotsError').classList.remove('show');
+  resetDuplicateConfirm();
   document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">Loading availability...</div>';
   var now = new Date();
   calView = { year: now.getFullYear(), month: now.getMonth() };
@@ -2067,6 +2068,7 @@ async function selectDate(iso) {
   state.slotStaffIds = [];
   document.getElementById('slotBtn').disabled = true;
   document.getElementById('slotsError').classList.remove('show');
+  resetDuplicateConfirm();
   renderCalendar(); // re-renders with .sel class on picked day
 
   var panel = document.getElementById('calSlots');
@@ -2140,6 +2142,7 @@ function pickSlot(el) {
   var staffAttr       = el.getAttribute('data-staff') || '';
   state.slotStaffIds  = staffAttr ? staffAttr.split(',').filter(Boolean) : [];
   trackEvent('slot_picked', { date: state.slotDate, slot: state.slotTime });
+  resetDuplicateConfirm();
   document.getElementById('slotBtn').disabled = false;
 }
 
@@ -2149,6 +2152,18 @@ function pickSlot(el) {
 // sees a fresh set of options instead of being told "try again" without
 // updating what's shown.
 var STALE_SLOT_RE = /slot not available|not available|unavailable|busy|invalid booking time|already booked/i;
+
+// The server warns when this mobile already has a consultation coming up.
+// The customer can go ahead anyway, so the Confirm button becomes the
+// second tap that confirms it. Any change of date or time clears that.
+function setSlotBtnText(t) {
+  var e = document.querySelector('#slotBtn .btn-text');
+  if (e) e.textContent = t;
+}
+function resetDuplicateConfirm() {
+  state.confirmDuplicate = false;
+  setSlotBtnText('Confirm booking →');
+}
 
 async function bookAppointment() {
   if (state.bookInFlight) return; // hard guard against double-clicks
@@ -2172,11 +2187,22 @@ async function bookAppointment() {
         platform:     state.platform,
         query:        state.query,
         staff_ids:    state.slotStaffIds,
-        service_id:   state.slotServiceId
+        service_id:   state.slotServiceId,
+        confirm_duplicate: !!state.confirmDuplicate
       })
     });
     var data = await res.json();
     if (!res.ok || !data.ok) {
+      if (data && data.duplicate) {
+        state.confirmDuplicate = true;
+        setSlotBtnText('Book another anyway →');
+        document.getElementById('slotsErrorText').textContent =
+          data.error + ' If you want a second one as well, tap "Book another anyway".';
+        document.getElementById('slotsError').classList.add('show');
+        setLoading('slotBtn', false);
+        state.bookInFlight = false;
+        return;
+      }
       var msg = (data && (data.error || (data.details && (data.details.message || JSON.stringify(data.details))))) || 'Booking failed. Please try again.';
       var err = new Error(msg);
       err.stale = STALE_SLOT_RE.test(msg);
@@ -2189,6 +2215,7 @@ async function bookAppointment() {
     setConfirmationWhen();
     document.getElementById('cMode').textContent    = state.mode || '—';
     trackEvent('booking_created', { date: state.slotDate, slot: state.slotTime, booking_id: (data && data.booking_id) || null });
+    resetDuplicateConfirm();
     go('s5');
   } catch (err) {
     if (err.stale) {
@@ -2230,6 +2257,7 @@ async function selectDateNoCache(iso) {
   state.slotTime = '';
   state.slotStaffIds = [];
   document.getElementById('slotBtn').disabled = true;
+  resetDuplicateConfirm();
   renderCalendar();
   var panel = document.getElementById('calSlots');
   panel.innerHTML = '<div class="cal-slots-loading">Refreshing available times...</div>';
