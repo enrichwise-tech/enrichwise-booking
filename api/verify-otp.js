@@ -10,6 +10,7 @@ import { getRedis } from './_redis.js';
 import { findGbpLead } from './zoho/_crm.js';
 
 const GBP_CHECK_TIMEOUT_MS = 2500;
+const VERIFIED_TTL_S = 7200; // how long a verified mobile may reschedule for
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -76,6 +77,10 @@ export default async function handler(req, res) {
   try {
     await redis.del(`otp:${fullNumber}`);
     await redis.del(`verify_attempts:${fullNumber}`);
+    // Proof that whoever is on this page owns the number. Rescheduling an
+    // existing appointment needs it, so a stranger who knows someone's mobile
+    // cannot move their consultation. Bookings do not depend on it.
+    await redis.set(`otp_ok:${fullNumber}`, '1', { ex: VERIFIED_TTL_S });
   } catch (err) {
     console.error('[verify-otp] redis cleanup error:', err.message);
   }

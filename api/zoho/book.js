@@ -26,7 +26,7 @@ import { sendAlert } from '../_alert.js';
 import { getRedis } from '../_redis.js';
 import { isBlockedDate } from './_blocked-dates.js';
 import { checkCap, clearCountCache } from './_caps.js';
-import { findUpcomingBooking, rememberBooking } from './_dupes.js';
+import { findUpcomingBooking, rememberBooking, updateBookingTime } from './_dupes.js';
 
 const DEFAULT_INSTANT_SVC   = '279048000000733018'; // Private consultation (Online) — 6 staff
 const DEFAULT_PRIORITY_SVC  = '279048000001524162'; // Priority Diagnostic Call — 2 staff, 3-day rolling
@@ -63,6 +63,96 @@ function to24Hour(slot) {
   return `${pad2(h)}:${pad2(min)}:00`;
 }
 
+/**
+ * Move the consultation this mobile already has to the time they just picked.
+ *
+ * Only reachable for a mobile that passed an OTP in the last two hours, so
+ * someone who merely knows a client's number cannot move their appointment.
+ * The booking id is never taken from the request: it is read from the index
+ * for that mobile, so a request can only ever move that person's own booking.
+ *
+ * Zoho keeps the same consultation and consultant unless we name a new one,
+ * so if the current consultant is busy at the new time we try the ones this
+ * slot is offered by before giving up.
+ */
+async function handleReschedule(res, { countryCode, mobile, date, slot, time24, staffIds }) {
+  const fullNumber = `${countryCode}${mobile}`;
+
+  let verified = false;
+  try {
+    verified = !!(await getRedis().get(`otp_ok:${fullNumber}`));
+  } catch (err) {
+    console.warn('[zoho/book] could not check verification:', err.message);
+  }
+  if (!verified) {
+    return res.status(403).json({ error: 'Please confirm your mobile number again before changing your consultation.' });
+  }
+
+  const existing = await findUpcomingBooking(countryCode, mobile);
+  if (!existing || !existing.booking_id) {
+    return res.status(409).json({ error: 'We could not find your existing consultation. Please refresh the page and try again.' });
+  }
+  if (existing.date === date && existing.time24 === time24) {
+    return res.status(409).json({ error: 'That is the time you already have. Pick a different one to move it.' });
+  }
+
+  // The day could be full for that consultation even though the slot shows.
+  if (existing.service_id) {
+    const cap = await checkCap(existing.service_id, date, { fresh: true });
+    if (cap.atCap) {
+      return res.status(409).json({ error: 'That day is full for your consultation. Please pick another day.' });
+    }
+  }
+
+  const bookingId = `#${String(existing.booking_id).replace(/^#/, '')}`;
+  const attempts = [null, ...staffIds.slice(0, 3)];
+  let lastMessage = '';
+  for (const staffId of attempts) {
+    const form = { booking_id: bookingId, start_time: `${date} ${time24}` };
+    if (staffId) form.staff_id = staffId;
+    let r;
+    try {
+      r = await zohoPost('/bookings/v1/json/rescheduleappointment', form);
+    } catch (err) {
+      console.error('[zoho/book] reschedule crashed:', err.message);
+      sendAlert('Reschedule crashed', { booking_id: bookingId, date, slot, error: err.message }).catch(() => {});
+      return res.status(500).json({ error: 'We could not change your consultation just now. Please try again.' });
+    }
+    const rv = r.data?.response?.returnvalue || {};
+    const outerStatus = r.data?.response?.status;
+    if (r.ok && outerStatus === 'success' && rv.booking_id) {
+      await updateBookingTime(countryCode, mobile, String(existing.booking_id).replace(/^#/, ''), {
+        date, slot, time24, service_id: existing.service_id
+      });
+      // Both days changed, so clear what the calendar has cached for each.
+      try {
+        const redis = getRedis();
+        const jobs = [];
+        for (const d of new Set([date, existing.date])) {
+          for (const id of getAllowedServiceIds()) jobs.push(redis.del(`zoho:slots:${id}:${d}`));
+          if (existing.service_id) jobs.push(clearCountCache(existing.service_id, d));
+        }
+        await Promise.allSettled(jobs);
+      } catch {}
+      console.log('[zoho/book] rescheduled', bookingId, 'to', date, time24);
+      return res.status(200).json({
+        ok: true,
+        rescheduled: true,
+        booking_id: rv.booking_id || bookingId,
+        staff_name: rv.staff_name || null,
+        previous: { date: existing.date, slot: existing.slot }
+      });
+    }
+    lastMessage = rv.message || r.data?.response?.message || '';
+    console.log('[zoho/book] reschedule attempt failed', staffId || '(same consultant)', lastMessage);
+  }
+
+  return res.status(409).json({
+    error: 'Your consultant is not free at that time. Please pick a different time.',
+    zoho_message: lastMessage || undefined
+  });
+}
+
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -94,23 +184,36 @@ export default async function handler(req, res) {
     return res.status(409).json({ error: 'This date is no longer available. Please pick another date.' });
   }
 
-  // Already has a consultation coming up? Zoho's own "Slots per Customer"
-  // limit does not apply to bookings made through the API, so the site has to
-  // do this itself. A warning the customer can click past, never a block.
-  if (!body.confirm_duplicate) {
-    const dup = await findUpcomingBooking(countryCode, mobile);
-    if (dup) {
-      console.log('[zoho/book] duplicate warning for', countryCode + mobile, dup.booking_id, dup.date, dup.slot);
-      return res.status(409).json({
-        error: `You already have a consultation booked on ${dup.date} at ${dup.slot}.`,
-        duplicate: { date: dup.date, slot: dup.slot, booking_id: dup.booking_id || null }
-      });
-    }
-  }
-
   const time24 = to24Hour(slot);
   if (!time24) {
     return res.status(400).json({ error: `Could not parse slot "${slot}"` });
+  }
+
+  const staffIds = Array.isArray(body.staff_ids) ? body.staff_ids.map(String).filter(Boolean) : [];
+
+  // Moving the consultation they already have, rather than making a new one.
+  if (body.action === 'reschedule') {
+    return handleReschedule(res, { countryCode, mobile, date, slot, time24, staffIds });
+  }
+
+  // Already has a consultation coming up? Zoho's own "Slots per Customer"
+  // limit does not apply to bookings made through the API, so the site has to
+  // do this itself. The page offers to move that one instead of making a
+  // second; there is no way to book two from here.
+  {
+    const dup = await findUpcomingBooking(countryCode, mobile);
+    if (dup) {
+      console.log('[zoho/book] duplicate stopped for', countryCode + mobile, dup.booking_id, dup.date, dup.slot);
+      return res.status(409).json({
+        error: `You already have a consultation booked on ${dup.date} at ${dup.slot}.`,
+        duplicate: {
+          date: dup.date,
+          slot: dup.slot,
+          booking_id: dup.booking_id || null,
+          can_reschedule: !!dup.booking_id
+        }
+      });
+    }
   }
 
   // Build the list of services to try, in order:

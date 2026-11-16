@@ -113,6 +113,32 @@ export async function rememberBooking(countryCode, mobile, entry) {
 }
 
 /**
+ * Move an entry to a new time after a reschedule, so the warning shows the
+ * booking where it actually is now. Never throws.
+ */
+export async function updateBookingTime(countryCode, mobile, bookingId, entry) {
+  const digits = mobileKey(countryCode, mobile);
+  const iso = bookingsDateToIso(entry.date);
+  if (!digits || !iso) return;
+  try {
+    const redis = getRedis();
+    const key = indexKey(digits);
+    const entries = parseEntries(await redis.get(key)).filter(e => e.booking_id !== bookingId);
+    entries.push({
+      iso,
+      date: entry.date,
+      slot: entry.slot || '',
+      time24: entry.time24 || '',
+      booking_id: bookingId,
+      service_id: entry.service_id || ''
+    });
+    await redis.set(key, JSON.stringify(entries.slice(-MAX_ENTRIES)), { ex: INDEX_TTL });
+  } catch (err) {
+    console.warn('[dupes] could not update the booking:', err.message);
+  }
+}
+
+/**
  * Rebuild the whole index from a list of Zoho bookings (the daily reconciler
  * already holds them). This is what makes bookings made on Zoho's own page,
  * or by the team inside Zoho, visible to the check. Cancelled bookings are

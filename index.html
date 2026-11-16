@@ -1886,7 +1886,7 @@ function loadSlots() {
   state.bookingHorizonDays = null;
   document.getElementById('slotBtn').disabled = true;
   document.getElementById('slotsError').classList.remove('show');
-  resetDuplicateConfirm();
+  clearDuplicateNotice();
   document.getElementById('calSlots').innerHTML = '<div class="cal-slots-empty">Loading availability...</div>';
   var now = new Date();
   calView = { year: now.getFullYear(), month: now.getMonth() };
@@ -2068,7 +2068,6 @@ async function selectDate(iso) {
   state.slotStaffIds = [];
   document.getElementById('slotBtn').disabled = true;
   document.getElementById('slotsError').classList.remove('show');
-  resetDuplicateConfirm();
   renderCalendar(); // re-renders with .sel class on picked day
 
   var panel = document.getElementById('calSlots');
@@ -2142,7 +2141,6 @@ function pickSlot(el) {
   var staffAttr       = el.getAttribute('data-staff') || '';
   state.slotStaffIds  = staffAttr ? staffAttr.split(',').filter(Boolean) : [];
   trackEvent('slot_picked', { date: state.slotDate, slot: state.slotTime });
-  resetDuplicateConfirm();
   document.getElementById('slotBtn').disabled = false;
 }
 
@@ -2153,15 +2151,16 @@ function pickSlot(el) {
 // updating what's shown.
 var STALE_SLOT_RE = /slot not available|not available|unavailable|busy|invalid booking time|already booked/i;
 
-// The server warns when this mobile already has a consultation coming up.
-// The customer can go ahead anyway, so the Confirm button becomes the
-// second tap that confirms it. Any change of date or time clears that.
+// The server stops a second booking when this mobile already has a
+// consultation coming up. There is no way to book two from here: the Confirm
+// button turns into "Move my consultation", which reschedules the existing
+// one to the time they just picked. Any change of date or time clears it.
 function setSlotBtnText(t) {
   var e = document.querySelector('#slotBtn .btn-text');
   if (e) e.textContent = t;
 }
-function resetDuplicateConfirm() {
-  state.confirmDuplicate = false;
+function clearDuplicateNotice() {
+  state.rescheduleMode = false;
   setSlotBtnText('Confirm booking →');
 }
 
@@ -2188,18 +2187,21 @@ async function bookAppointment() {
         query:        state.query,
         staff_ids:    state.slotStaffIds,
         service_id:   state.slotServiceId,
-        confirm_duplicate: !!state.confirmDuplicate
+        action: state.rescheduleMode ? 'reschedule' : undefined
       })
     });
     var data = await res.json();
     if (!res.ok || !data.ok) {
       if (data && data.duplicate) {
-        state.confirmDuplicate = true;
-        setSlotBtnText('Book another anyway →');
-        document.getElementById('slotsErrorText').textContent =
-          data.error + ' If you want a second one as well, tap "Book another anyway".';
+        var canMove = !!data.duplicate.can_reschedule;
+        state.rescheduleMode = canMove;
+        setSlotBtnText(canMove ? 'Move my consultation here →' : 'Confirm booking →');
+        document.getElementById('slotsErrorText').textContent = canMove
+          ? data.error + ' To move it to this time instead, tap "Move my consultation here".'
+          : data.error + ' Please message us on Help if you need to change it.';
         document.getElementById('slotsError').classList.add('show');
         setLoading('slotBtn', false);
+        document.getElementById('slotBtn').disabled = !canMove;
         state.bookInFlight = false;
         return;
       }
@@ -2214,8 +2216,10 @@ async function bookAppointment() {
     document.getElementById('cService').textContent = SERVICE_NAME;
     setConfirmationWhen();
     document.getElementById('cMode').textContent    = state.mode || '—';
-    trackEvent('booking_created', { date: state.slotDate, slot: state.slotTime, booking_id: (data && data.booking_id) || null });
-    resetDuplicateConfirm();
+    var heading = document.querySelector('#s5 .success-text h1');
+    if (heading) heading.textContent = data.rescheduled ? "Your consultation is moved" : "You're booked";
+    trackEvent(data.rescheduled ? 'booking_rescheduled' : 'booking_created', { date: state.slotDate, slot: state.slotTime, booking_id: (data && data.booking_id) || null });
+    clearDuplicateNotice();
     go('s5');
   } catch (err) {
     if (err.stale) {
@@ -2257,7 +2261,6 @@ async function selectDateNoCache(iso) {
   state.slotTime = '';
   state.slotStaffIds = [];
   document.getElementById('slotBtn').disabled = true;
-  resetDuplicateConfirm();
   renderCalendar();
   var panel = document.getElementById('calSlots');
   panel.innerHTML = '<div class="cal-slots-loading">Refreshing available times...</div>';
