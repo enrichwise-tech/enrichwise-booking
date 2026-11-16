@@ -27,6 +27,7 @@
 import { zohoGet, zohoGetJson, zohoPostJson } from './zoho/_client.js';
 import { sendAlert } from './_alert.js';
 import { rebuildDuplicateIndex } from './zoho/_dupes.js';
+import { findClashes, cancelClashes } from './zoho/_clashes.js';
 
 const CRM_BASE = '/crm/v6';
 const BOOKINGS_PATH = '/bookings/v1/json/fetchappointment';
@@ -263,6 +264,18 @@ export default async function handler(req, res) {
 
     console.log(`[reconcile] bookings=${bookings.length} upcoming=${upcoming.length} events_with_bid=${eventBidMap.size} drift=${drift.length}`);
 
+    // People holding two consultations at the very same moment. Cancelling
+    // sends the customer Zoho's own cancellation email and WhatsApp, which
+    // cannot be turned off, so this only runs when asked: DUPLICATE_AUTOCANCEL
+    // for the daily run, or ?cancel=1 by hand. Otherwise it only reports.
+    const { clashes, sameDay } = findClashes(upcoming);
+    const autoCancel = (process.env.DUPLICATE_AUTOCANCEL || '').trim() === '1';
+    const doCancel = clashes.length > 0 && ((isValidCron && autoCancel) || (isValidManual && req.query.cancel === '1'));
+    const cancelResult = await cancelClashes(clashes, { apply: doCancel });
+    if (clashes.length || sameDay.length) {
+      console.log(`[reconcile] clashes=${clashes.length} same_day=${sameDay.length} cancelled=${cancelResult.cancelled.length}`);
+    }
+
     const summary = {
       ok: true,
       range: { from: todayIso, to: toIso, days: horizon },
@@ -270,6 +283,19 @@ export default async function handler(req, res) {
       bookings_upcoming: upcoming.length,
       events_with_booking_id: eventBidMap.size,
       duplicate_index_mobiles: dupeIndexWritten,
+      clashes: clashes.map(c => ({
+        customer: c.customer,
+        start_time: c.start_time,
+        keep: c.keep.booking_id,
+        cancel: c.cancel.booking_id,
+        keep_staff: c.keep.staff,
+        cancel_staff: c.cancel.staff
+      })),
+      clashes_cancelled: cancelResult.cancelled,
+      clashes_cancel_failed: cancelResult.failed,
+      clashes_cancel_applied: cancelResult.applied,
+      clashes_cancel_refused: cancelResult.refused || null,
+      same_day_pairs: sameDay,
       drift_count: drift.length,
       drift: drift.map(b => ({
         booking_id: (b.booking_id || '').replace(/^#/, ''),
@@ -291,6 +317,26 @@ export default async function handler(req, res) {
     //    five days; the daily heartbeat is the fix.
     //  - Manual invocations skip the heartbeat (avoids noise while debugging).
     //  - Either path is suppressed by ?alert=0 for one-off silent sweeps.
+    // Double bookings get their own message, whatever the sync drift is.
+    if (alertOnDrift && (clashes.length || sameDay.length)) {
+      const lines = [];
+      for (const c of clashes.slice(0, 8)) {
+        const done = cancelResult.cancelled.some(x => x.booking_id === c.cancel.booking_id);
+        lines.push(`${c.start_time} ${c.customer}: keep ${c.keep.booking_id} (${c.keep.staff}), ${done ? 'cancelled' : 'to cancel'} ${c.cancel.booking_id} (${c.cancel.staff})`);
+      }
+      for (const d of sameDay.slice(0, 8)) {
+        lines.push(`${d.day} ${d.customer}: ${d.bookings.map(b => b.start_time.slice(12, 17) + ' ' + b.booking_id).join(', ')} — same day, please check`);
+      }
+      sendAlert(clashes.length ? 'Double bookings found' : 'Same-day repeat bookings', {
+        same_time: clashes.length,
+        same_day: sameDay.length,
+        cancelled: cancelResult.applied ? cancelResult.cancelled.length : 0,
+        mode: cancelResult.applied ? 'cancelled automatically' : (cancelResult.refused || 'report only, cancel by hand'),
+        cases: lines.join(String.fromCharCode(10)),
+        failed: cancelResult.failed.length ? cancelResult.failed.map(f => `${f.booking_id}: ${f.error}`).join(String.fromCharCode(10)) : ''
+      }).catch(() => {});
+    }
+
     if (alertOnDrift) {
       if (drift.length > 0) {
         // Cap the body so we don't blow the Periskope 4KB limit if drift is huge.
