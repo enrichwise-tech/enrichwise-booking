@@ -892,6 +892,20 @@ h1 { font-size: 24px; font-weight: 600; color: var(--ink); letter-spacing: -0.4p
         Resend in <span class="timer" id="timerDisplay">30s</span>
       </span>
     </div>
+    <div class="otp-alt-wrap" id="otpEmailFallbackWrap">
+      <span class="otp-alt-link" id="otpEmailFallbackLink" onclick="showOtpEmailFallback()">OTP not arriving? Get it by email instead</span>
+    </div>
+    <div class="email-otp-form" id="otpEmailFallbackForm" style="display:none">
+      <input type="email" id="otpFallbackEmail" placeholder="Email address" autocomplete="email" oninput="onOtpFallbackEmailInput()">
+      <div class="error-msg" id="otpFallbackEmailError">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6.5" stroke="#e24b4a"/><path d="M7 4v3.5M7 10h.01" stroke="#e24b4a" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span id="otpFallbackEmailErrorText">Please enter a valid email address</span>
+      </div>
+      <button class="btn" id="sendFallbackEmailBtn" disabled onclick="sendOtpEmailFromOtpScreen()">
+        <div class="btn-spinner"></div>
+        <span class="btn-text">Send OTP to email</span>
+      </button>
+    </div>
   </div>
 
   <!-- STEP 3: Corpus -->
@@ -1527,6 +1541,7 @@ async function sendOtp() {
     state.otpMedium = 'whatsapp';
     document.getElementById('mobDisplay').textContent = '+' + cc + ' ' + mob;
     document.getElementById('otpMediumLabel').textContent = 'via WhatsApp';
+    resetOtpEmailFallback();
     trackEvent('otp_sent', { medium: 'whatsapp' });
     go('s1');
     startTimer(30);
@@ -1603,6 +1618,7 @@ async function sendOtpViaEmail() {
     state.otpEmail = email;
     document.getElementById('mobDisplay').textContent = email;
     document.getElementById('otpMediumLabel').textContent = 'via email';
+    resetOtpEmailFallback();
     trackEvent('otp_sent', { medium: 'email' });
     go('s1');
     startTimer(30);
@@ -1612,6 +1628,73 @@ async function sendOtpViaEmail() {
     document.getElementById('emailOtpError').classList.add('show');
   }
   setLoading('sendEmailBtn', false);
+}
+
+/* ── Email fallback on the OTP screen ──
+   A WhatsApp OTP can fail to arrive after send-otp has already returned OK,
+   because WhatsApp reports "undeliverable" later. Resend only tries WhatsApp
+   again, so this offers email without going back a screen. */
+function resetOtpEmailFallback() {
+  var wrap = document.getElementById('otpEmailFallbackWrap');
+  var form = document.getElementById('otpEmailFallbackForm');
+  // Only offered when the OTP went by WhatsApp; on email it is already in use.
+  wrap.style.display = state.otpMedium === 'whatsapp' ? 'block' : 'none';
+  form.style.display = 'none';
+  document.getElementById('otpFallbackEmail').value = '';
+  document.getElementById('sendFallbackEmailBtn').disabled = true;
+  document.getElementById('otpFallbackEmailError').classList.remove('show');
+}
+
+function showOtpEmailFallback() {
+  document.getElementById('otpEmailFallbackWrap').style.display = 'none';
+  document.getElementById('otpEmailFallbackForm').style.display = 'block';
+  var pre = (state.email || '').trim();
+  if (pre) {
+    document.getElementById('otpFallbackEmail').value = pre;
+    onOtpFallbackEmailInput();
+  }
+  setTimeout(function() { document.getElementById('otpFallbackEmail').focus(); }, 50);
+}
+
+function onOtpFallbackEmailInput() {
+  var email = document.getElementById('otpFallbackEmail').value.trim();
+  document.getElementById('sendFallbackEmailBtn').disabled = !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+  document.getElementById('otpFallbackEmailError').classList.remove('show');
+}
+
+async function sendOtpEmailFromOtpScreen() {
+  var email = document.getElementById('otpFallbackEmail').value.trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    document.getElementById('otpFallbackEmailErrorText').textContent = 'Please enter a valid email address';
+    document.getElementById('otpFallbackEmailError').classList.add('show');
+    return;
+  }
+  setLoading('sendFallbackEmailBtn', true);
+  try {
+    var res = await fetch(API_BASE + '/api/send-otp-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobile: state.mob, country_code: state.cc, email: email })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
+    state.email = email;
+    state.otpEmail = email;
+    state.otpMedium = 'email';
+    document.getElementById('mobDisplay').textContent = email;
+    document.getElementById('otpMediumLabel').textContent = 'via email';
+    trackEvent('otp_sent', { medium: 'email_fallback' });
+    getBoxes().forEach(function(b) { b.value = ''; b.classList.remove('err'); });
+    document.getElementById('verBtn').disabled = true;
+    document.getElementById('otpError').classList.remove('show');
+    resetOtpEmailFallback();
+    startTimer(30);
+    document.getElementById('o0').focus();
+  } catch (err) {
+    document.getElementById('otpFallbackEmailErrorText').textContent = err.message || 'Could not send OTP. Please try again.';
+    document.getElementById('otpFallbackEmailError').classList.add('show');
+  }
+  setLoading('sendFallbackEmailBtn', false);
 }
 
 /* ── Step 2: OTP ── */
