@@ -6,7 +6,7 @@
  * then sends it via WATI WhatsApp template message.
  */
 import { getRedis } from './_redis.js';
-import { sendAlert } from './_alert.js';
+import { sendAlert, alertDatabaseDown } from './_alert.js';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -63,6 +63,7 @@ export default async function handler(req, res) {
     if (attempts === 1) await redis.expire(rateLimitKey, 600);
   } catch (err) {
     console.error('[send-otp] redis op error:', err.message);
+    await alertDatabaseDown('send OTP (WhatsApp)', err);
     return res.status(500).json({ error: 'Service unavailable (redis). Please try again.' });
   }
 

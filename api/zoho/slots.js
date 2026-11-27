@@ -39,6 +39,7 @@
  *   }
  */
 import { zohoGet } from './_client.js';
+import { flushZohoUsage } from './_usage.js';
 import { getRedis } from '../_redis.js';
 import { isBlockedDate } from './_blocked-dates.js';
 import { checkCap, BOOKING_HORIZON_DAYS } from './_caps.js';
@@ -194,7 +195,7 @@ function applyOneHourCutoff(times, dateStr) {
   });
 }
 
-export default async function handler(req, res) {
+async function handleRequest(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -358,5 +359,15 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('[zoho/slots] error:', err.message);
     return res.status(500).json({ error: err.message });
+  }
+}
+
+// Writes this request's batched Zoho call counts (see _usage.js) before the
+// function ends, so none are left waiting in memory.
+export default async function handler(req, res) {
+  try {
+    return await handleRequest(req, res);
+  } finally {
+    await flushZohoUsage();
   }
 }

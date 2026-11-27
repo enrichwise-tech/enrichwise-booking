@@ -7,6 +7,7 @@
  * form (one Zoho CRM search), as gbp_done plus name/email for prefill.
  */
 import { getRedis } from './_redis.js';
+import { alertDatabaseDown } from './_alert.js';
 import { findGbpLead } from './zoho/_crm.js';
 
 const GBP_CHECK_TIMEOUT_MS = 2500;
@@ -49,6 +50,7 @@ export default async function handler(req, res) {
     if (attempts === 1) await redis.expire(attemptsKey, 600);
   } catch (err) {
     console.error('[verify-otp] redis op error:', err.message);
+    await alertDatabaseDown('verify OTP', err);
     return res.status(500).json({ valid: false, error: 'Service unavailable. Please try again.' });
   }
 

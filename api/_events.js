@@ -15,6 +15,11 @@
 import { getRedis } from './_redis.js';
 
 const RECENT_LIST = 'events:recent';
+
+// Housekeeping this instance has already done today (see logEvent).
+const doneToday = new Set();
+let stepsSinceTrim = 0;
+const TRIM_EVERY = 10;
 const RECENT_MAX = 500;
 
 function todayKey() {
@@ -41,17 +46,25 @@ export async function logEvent(evt) {
   const json = JSON.stringify(record);
   const day = todayKey();
 
-  // Push to the recent list and trim to the cap
+  // Push to the recent list and the day's list
   await Promise.all([
     redis.lpush(RECENT_LIST, json),
     redis.lpush(day, json)
   ]);
 
-  // Keep the recent list bounded; daily list expires on its own
-  await Promise.all([
-    redis.ltrim(RECENT_LIST, 0, RECENT_MAX - 1),
-    redis.expire(day, 60 * 60 * 24 * 365) // daily lists kept a year (was 60 days until 27-Nov-26)
-  ]);
+  // Keep the recent list bounded (every TRIM_EVERY steps: it may run a few
+  // over RECENT_MAX in between) and give the day list its expiry once per
+  // instance per day. Daily lists are kept a year (60 days until 27-Nov-26).
+  const housekeeping = [];
+  if (++stepsSinceTrim >= TRIM_EVERY) {
+    stepsSinceTrim = 0;
+    housekeeping.push(redis.ltrim(RECENT_LIST, 0, RECENT_MAX - 1));
+  }
+  if (!doneToday.has(day)) {
+    doneToday.add(day);
+    housekeeping.push(redis.expire(day, 60 * 60 * 24 * 365));
+  }
+  if (housekeeping.length) await Promise.all(housekeeping);
 
   // Per-number funnel state (which stage was the most recent) + context
   if (record.mobile) {
@@ -77,7 +90,11 @@ export async function logEvent(evt) {
     // Maintain index set so the cron can enumerate all funnel numbers
     // (without relying on the capped events:recent list)
     await redis.sadd('funnel:all', fullNumber);
-    await redis.expire('funnel:all', 60 * 60 * 24 * 35); // 35 days, slightly > hash TTL
+    const indexMark = 'funnel:all@' + day;
+    if (!doneToday.has(indexMark)) {
+      doneToday.add(indexMark);
+      await redis.expire('funnel:all', 60 * 60 * 24 * 35); // 35 days, slightly > hash TTL
+    }
   }
 }
 

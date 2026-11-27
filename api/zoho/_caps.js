@@ -80,9 +80,21 @@ function alertOnce(serviceId, dateStr, message) {
  * treat the date as open and alert PL Case Track. A Zoho hiccup then can't hide
  * every slot from clients, at the risk of occasionally going over a cap.
  */
+// Counts this instance read recently, so repeat calendar loads skip the
+// database. Never used when fresh is asked for.
+const MEMORY_COUNT_MS = 60 * 1000;
+const memoryCounts = new Map(); // key -> { count, until }
+function rememberCount(key, count) { memoryCounts.set(key, { count, until: Date.now() + MEMORY_COUNT_MS }); }
+
 export async function checkCap(serviceId, dateStr, { fresh = false } = {}) {
   const cap = dailyCapFor(serviceId);
   if (cap === null) return { atCap: false, count: null, cap: null, source: 'no_cap' };
+
+  const memKey = countKey(serviceId, dateStr);
+  if (!fresh) {
+    const m = memoryCounts.get(memKey);
+    if (m && Date.now() < m.until) return { atCap: m.count >= cap, count: m.count, cap, source: 'memory' };
+  }
 
   let redis = null;
   try { redis = getRedis(); } catch {}
@@ -92,6 +104,7 @@ export async function checkCap(serviceId, dateStr, { fresh = false } = {}) {
       const cached = await redis.get(countKey(serviceId, dateStr));
       if (cached !== null && cached !== undefined) {
         const count = Number(cached);
+        rememberCount(memKey, count);
         return { atCap: count >= cap, count, cap, source: 'cache' };
       }
     } catch {}
@@ -99,6 +112,7 @@ export async function checkCap(serviceId, dateStr, { fresh = false } = {}) {
 
   try {
     const count = await readCountFromZoho(serviceId, dateStr, cap);
+    rememberCount(memKey, count);
     if (redis) {
       try {
         await redis.set(countKey(serviceId, dateStr), count, { ex: COUNT_CACHE_TTL });
@@ -124,5 +138,6 @@ export async function checkCap(serviceId, dateStr, { fresh = false } = {}) {
 
 // After a booking lands, forget the cached count so the next read is correct.
 export async function clearCountCache(serviceId, dateStr) {
+  memoryCounts.delete(countKey(serviceId, dateStr));
   try { await getRedis().del(countKey(serviceId, dateStr)); } catch {}
 }

@@ -19,6 +19,14 @@ const ZOHO_ACCOUNTS = 'https://accounts.zoho.in';
 const ZOHO_API = 'https://www.zohoapis.in';
 const TOKEN_KEY = 'zoho:access_token';
 
+// In-memory copy of the token, so a warm instance does not read the
+// database before every Zoho call (that was ~3,000 commands a day).
+const MEMORY_TOKEN_MS = 4 * 60 * 1000;
+let memoryToken = null;
+let memoryTokenUntil = 0;
+function rememberToken(token) { memoryToken = token; memoryTokenUntil = Date.now() + MEMORY_TOKEN_MS; }
+function forgetToken() { memoryToken = null; memoryTokenUntil = 0; }
+
 async function refreshAccessToken() {
   const clientId = (process.env.ZOHO_CLIENT_ID || '').trim();
   const clientSecret = (process.env.ZOHO_CLIENT_SECRET || '').trim();
@@ -55,6 +63,8 @@ async function refreshAccessToken() {
     throw new Error(`Zoho token refresh missing access_token: ${text.slice(0, 200)}`);
   }
 
+  rememberToken(data.access_token);
+
   // Cache in Upstash for 55 minutes (tokens last 1 hour)
   try {
     const redis = getRedis();
@@ -78,12 +88,15 @@ const WAIT_POLL_MS = 200;       // how often to re-check cache while waiting
 const WAIT_MAX_ATTEMPTS = 10;   // total ~2s wait before giving up and refreshing ourselves
 
 export async function getAccessToken() {
+  // 0. This instance already has a recent copy: no database call at all.
+  if (memoryToken && Date.now() < memoryTokenUntil) return memoryToken;
+
   // 1. Try cache first — happy path, no contention
   let redis;
   try {
     redis = getRedis();
     const cached = await redis.get(TOKEN_KEY);
-    if (cached) return cached;
+    if (cached) { rememberToken(cached); return cached; }
   } catch (err) {
     console.warn('[zoho] cache read failed, refreshing directly:', err.message);
     return refreshAccessToken();
@@ -115,7 +128,7 @@ export async function getAccessToken() {
     await new Promise(r => setTimeout(r, WAIT_POLL_MS));
     try {
       const cached = await redis.get(TOKEN_KEY);
-      if (cached) return cached;
+      if (cached) { rememberToken(cached); return cached; }
     } catch {}
   }
 
@@ -162,6 +175,7 @@ async function zohoFetch(path, { method = 'GET', query, body, json = false, retr
   // refreshing on every such call is what tripped Zoho's OAuth rate limit.
   const tokenDead = res.status === 401 && data?.code !== 'OAUTH_SCOPE_MISMATCH';
   if (tokenDead && retryOn401) {
+    forgetToken();
     try {
       const redis = getRedis();
       await redis.del(TOKEN_KEY);

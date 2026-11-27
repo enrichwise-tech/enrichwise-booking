@@ -25,6 +25,8 @@
  *   - ZOHO_INFO_KEY as ?key= query param (manual admin invocation)
  */
 import { zohoGet, zohoGetJson, zohoPostJson } from './zoho/_client.js';
+import { flushZohoUsage } from './zoho/_usage.js';
+import { checkRedisUsage } from './_usage-check.js';
 import { sendAlert } from './_alert.js';
 import { rebuildDuplicateIndex } from './zoho/_dupes.js';
 import { findClashes, cancelClashes } from './zoho/_clashes.js';
@@ -209,7 +211,7 @@ function buildEventPayload(booking, ownerCrmId, whatIdLeadId, reasonNote) {
   return payload;
 }
 
-export default async function handler(req, res) {
+async function handleRequest(req, res) {
   setCors(res);
 
   const cronSecret = (process.env.CRON_SECRET || '').trim();
@@ -337,6 +339,10 @@ export default async function handler(req, res) {
       }).catch(() => {});
     }
 
+    // Booking database usage this month (warns once a month if it is heading
+    // past 400,000 commands). Never throws.
+    summary.redis_usage = await checkRedisUsage();
+
     if (alertOnDrift) {
       if (drift.length > 0) {
         // Cap the body so we don't blow the Periskope 4KB limit if drift is huge.
@@ -398,5 +404,15 @@ export default async function handler(req, res) {
     console.error('[reconcile] error:', err.message);
     sendAlert('Reconciler crashed', { error: err.message }).catch(() => {});
     return res.status(500).json({ error: err.message });
+  }
+}
+
+// Writes this request's batched Zoho call counts (see _usage.js) before the
+// function ends, so none are left waiting in memory.
+export default async function handler(req, res) {
+  try {
+    return await handleRequest(req, res);
+  } finally {
+    await flushZohoUsage();
   }
 }

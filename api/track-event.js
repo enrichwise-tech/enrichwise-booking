@@ -15,6 +15,7 @@
  *   }
  */
 import { logEvent } from './_events.js';
+import { alertDatabaseDown } from './_alert.js';
 
 const ALLOWED_TYPES = new Set([
   'otp_sent',
@@ -83,6 +84,7 @@ export default async function handler(req, res) {
     await logEvent(evt);
   } catch (err) {
     console.error('[track-event] log error:', err.message);
+    await alertDatabaseDown('log a visitor step', err);
     // Continue — event logging failure shouldn't break CRM mirroring
   }
 

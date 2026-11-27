@@ -57,3 +57,28 @@ export async function sendAlert(subject, details = {}) {
     console.error('[alert] Periskope send error:', err.name, err.message);
   }
 }
+
+/**
+ * The booking database (Upstash) refused a request. Without it nobody can be
+ * sent an OTP, so nobody can book, and until 27-Nov-26 this failed silently
+ * for about three hours (monthly command limit reached). At most one alert an
+ * hour from each running instance: the database is what failed, so there is
+ * nowhere shared to remember that an alert already went out.
+ */
+let lastDatabaseAlert = 0;
+const DATABASE_ALERT_GAP_MS = 60 * 60 * 1000;
+
+export async function alertDatabaseDown(where, err) {
+  const now = Date.now();
+  if (now - lastDatabaseAlert < DATABASE_ALERT_GAP_MS) return;
+  lastDatabaseAlert = now;
+  const message = String((err && err.message) || err || '').slice(0, 200);
+  await sendAlert('Booking database not responding: visitors cannot get an OTP or book', {
+    where,
+    error: message,
+    likely: /max requests limit|limit exceeded/i.test(message)
+      ? 'Upstash monthly command limit or budget reached: check the plan on booking-upstash in Vercel > Storage'
+      : 'Upstash outage or connection problem: check booking-upstash in Vercel > Storage',
+    note: 'Repeats at most once an hour while it lasts'
+  });
+}

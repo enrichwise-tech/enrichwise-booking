@@ -22,6 +22,7 @@
  * Zoho requires from_time in "dd-MMM-yyyy HH:mm:ss" 24-hour format.
  */
 import { zohoPost } from './_client.js';
+import { flushZohoUsage } from './_usage.js';
 import { sendAlert } from '../_alert.js';
 import { getRedis } from '../_redis.js';
 import { isBlockedDate } from './_blocked-dates.js';
@@ -153,7 +154,7 @@ async function handleReschedule(res, { countryCode, mobile, date, slot, time24, 
   });
 }
 
-export default async function handler(req, res) {
+async function handleRequest(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -381,4 +382,14 @@ export default async function handler(req, res) {
     },
     details: lastData
   });
+}
+
+// Writes this request's batched Zoho call counts (see _usage.js) before the
+// function ends, so none are left waiting in memory.
+export default async function handler(req, res) {
+  try {
+    return await handleRequest(req, res);
+  } finally {
+    await flushZohoUsage();
+  }
 }
