@@ -6,7 +6,7 @@
  * into three places so we can query it different ways:
  *
  *   1. events:recent      - capped list (last 500) for fast dashboards
- *   2. events:YYYY-MM-DD  - daily list for date-based queries
+ *   2. events:YYYY-MM-DD  - daily list for date-based queries (kept 365 days)
  *   3. funnel:{mobile}    - per-number hash tracking latest stage reached
  *
  * All reads live behind a query-key gate (ZOHO_INFO_KEY reused) so nobody can
@@ -50,7 +50,7 @@ export async function logEvent(evt) {
   // Keep the recent list bounded; daily list expires on its own
   await Promise.all([
     redis.ltrim(RECENT_LIST, 0, RECENT_MAX - 1),
-    redis.expire(day, 60 * 60 * 24 * 60) // 60-day retention for daily lists
+    redis.expire(day, 60 * 60 * 24 * 365) // daily lists kept a year (was 60 days until 27-Nov-26)
   ]);
 
   // Per-number funnel state (which stage was the most recent) + context

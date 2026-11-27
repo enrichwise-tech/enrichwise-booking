@@ -139,9 +139,9 @@ for (const d of Object.values(r.body.days)) {
   }
 }
 
-// 5. The window is capped at 60.
+// 5. The window is capped at 365.
 r = await call({ key: 'k123', days: '500', by: 'corpus' });
-assert.equal(r.body.window_days, 60);
+assert.equal(r.body.window_days, 365);
 
 console.log('ALL PASSED');
 process.exit(0);

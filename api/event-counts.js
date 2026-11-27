@@ -10,7 +10,8 @@
  * Default mode: raw event counts per UTC day. days defaults to 3, capped at 10.
  *
  * by=corpus: distinct people per day, how far each got, split by the amount
- * option they picked. days defaults to 14, capped at 60 (the log keeps 60).
+ * option they picked. days defaults to 14, capped at 365 (the log keeps a year;
+ * it kept 60 days until 27-Nov-26, so nothing before 28-Sep-26 exists).
  *   - A person is a country code + mobile.
  *   - A person belongs to the UTC day of their FIRST otp_sent in the window,
  *     even if they carried on the next day. People whose first otp_sent falls
@@ -31,15 +32,15 @@ import { getRedis } from './_redis.js';
 const DEFAULT_DAYS = 3;
 const MAX_DAYS = 10;
 const CORPUS_DEFAULT_DAYS = 14;
-const CORPUS_MAX_DAYS = 60;
+const CORPUS_MAX_DAYS = 365;
 const COUNTED_TYPES = ['otp_sent', 'otp_verified', 'details_submitted', 'slot_picked', 'booking_created', 'gbp_redirected'];
 
 // The main path, in order. gbp_redirected branches off after corpus_selected.
 const STEPS = ['otp_sent', 'otp_verified', 'corpus_selected', 'details_submitted', 'slot_picked', 'booking_created'];
 const RANK = Object.fromEntries(STEPS.map((s, i) => [s, i]));
 
-// Every label the page has sent within the log's 60 days. Anything else is
-// "other". "Under ₹1 Cr" stopped on 27-Nov-26, when it was split in two.
+// Every label the page has sent since 28-Sep-26, the oldest day still held.
+// Anything else is "other". "Under ₹1 Cr" stopped on 27-Nov-26, when it was split in two.
 export const KNOWN_CORPUS = [
   'Under ₹50 lakh',
   '₹50 lakh – ₹1 Cr',
